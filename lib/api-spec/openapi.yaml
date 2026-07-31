@@ -10,6 +10,10 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: jobs
+    description: APM job listings aggregated from company career sites
+  - name: companies
+    description: Tracked companies and their fetch status
 paths:
   /healthz:
     get:
@@ -24,6 +28,71 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /jobs:
+    get:
+      operationId: listJobs
+      tags: [jobs]
+      summary: List all cached APM/RPM job listings
+      parameters:
+        - name: company
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by company slug
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Keyword filter on job title
+      responses:
+        "200":
+          description: Job listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Job"
+  /jobs/refresh:
+    post:
+      operationId: refreshJobs
+      tags: [jobs]
+      summary: Re-fetch job listings from all company endpoints
+      responses:
+        "200":
+          description: Refresh result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResult"
+  /jobs/stats:
+    get:
+      operationId: getJobStats
+      tags: [jobs]
+      summary: Aggregate stats about cached jobs
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStats"
+  /companies:
+    get:
+      operationId: listCompanies
+      tags: [companies]
+      summary: List tracked companies with program metadata and fetch status
+      responses:
+        "200":
+          description: Companies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Company"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +102,85 @@ components:
           type: string
       required:
         - status
-
+    Job:
+      type: object
+      required: [id, title, company, companySlug, location, applyUrl, source]
+      properties:
+        id:
+          type: string
+          description: Stable unique id (companySlug + external id)
+        title:
+          type: string
+        company:
+          type: string
+          description: Display name, e.g. "Google"
+        companySlug:
+          type: string
+          description: Machine slug, e.g. "google"
+        location:
+          type: string
+        applyUrl:
+          type: string
+        source:
+          type: string
+          description: ATS source (greenhouse, lever, workday, google, uber)
+        postedOn:
+          type: ["string", "null"]
+          description: Posting date text if available
+    Company:
+      type: object
+      required: [name, slug, ats, programName, programStatus, jobCount]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        ats:
+          type: string
+          description: greenhouse | lever | workday | custom
+        programName:
+          type: string
+          description: e.g. "APM Program", "RPM Program"
+        programStatus:
+          type: string
+          description: active | paused
+        jobCount:
+          type: number
+        lastCheckedAt:
+          type: ["string", "null"]
+          description: ISO timestamp of last successful fetch
+        error:
+          type: ["string", "null"]
+          description: Last fetch error, if any
+    RefreshResult:
+      type: object
+      required: [totalJobs, companiesChecked, errors, refreshedAt]
+      properties:
+        totalJobs:
+          type: number
+        companiesChecked:
+          type: number
+        errors:
+          type: array
+          items:
+            type: object
+            required: [companySlug, message]
+            properties:
+              companySlug:
+                type: string
+              message:
+                type: string
+        refreshedAt:
+          type: string
+    JobStats:
+      type: object
+      required: [totalJobs, companiesWithJobs, totalCompanies, lastRefreshAt]
+      properties:
+        totalJobs:
+          type: number
+        companiesWithJobs:
+          type: number
+        totalCompanies:
+          type: number
+        lastRefreshAt:
+          type: ["string", "null"]

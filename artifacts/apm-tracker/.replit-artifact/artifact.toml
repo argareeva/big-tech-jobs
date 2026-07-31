@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "APM Job Tracker"
+version = "1.0.0"
+id = "artifacts/apm-tracker"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19442
+
+[services.development]
+run = "pnpm --filter @workspace/apm-tracker run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/apm-tracker", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/apm-tracker/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19442"
+BASE_PATH = "/"

@@ -1,0 +1,1 @@
+- [APM tracker ATS endpoints](apm-ats-endpoints.md) — verified per-company careers JSON endpoints + quirks (Workday 422 = bad tenant; Uber needs x-csrf-token: x; Google is HTML-parsed).
