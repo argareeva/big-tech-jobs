@@ -6,6 +6,12 @@ export interface CompanyConfig {
   ats: Ats;
   programName: string;
   programStatus: "active" | "paused";
+  /**
+   * When true, this company's career site doesn't expose a usable server-side
+   * JSON API (e.g. requires browser auth, returns HTML, or is network-blocked).
+   * Fetches are skipped cleanly and the dashboard shows "Feed unavailable".
+   */
+  feedUnavailable?: true;
   /** Greenhouse/Lever board slug */
   boardSlug?: string;
   /** Workday: host like "meta.wd1.myworkdayjobs.com" and tenant site name */
@@ -23,18 +29,25 @@ export const COMPANIES: CompanyConfig[] = [
   // Lever
   { name: "Spotify", slug: "spotify", ats: "lever", programName: "APM Program", programStatus: "active", boardSlug: "spotify" },
   // Workday
-  { name: "Meta", slug: "meta", ats: "workday", programName: "RPM Program", programStatus: "active", workday: { host: "meta.wd1.myworkdayjobs.com", company: "meta", tenant: "Meta_External_Site" } },
-  { name: "Salesforce", slug: "salesforce", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "salesforce.wd1.myworkdayjobs.com", company: "salesforce", tenant: "External_Career_Site" } },
+  // metacareers.com uses a private Relay/GraphQL endpoint that blocks server-side requests
+  { name: "Meta", slug: "meta", ats: "custom", programName: "RPM Program", programStatus: "active", feedUnavailable: true },
+  { name: "Salesforce", slug: "salesforce", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "salesforce.wd12.myworkdayjobs.com", company: "salesforce", tenant: "External_Career_Site" } },
   { name: "Visa", slug: "visa", ats: "smartrecruiters", programName: "APM Program", programStatus: "active", boardSlug: "Visa" },
-  { name: "Intuit", slug: "intuit", ats: "workday", programName: "RPM Program", programStatus: "active", workday: { host: "intuit.wd5.myworkdayjobs.com", company: "intuit", tenant: "External_Career_Site" } },
-  { name: "Walmart", slug: "walmart", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "walmart.wd5.myworkdayjobs.com", company: "walmart", tenant: "WalmartExternalCareers" } },
+  // jobs.intuit.com (Radancy/TalentBrew) returns hasJobs:true but empty results server-side
+  { name: "Intuit", slug: "intuit", ats: "custom", programName: "RPM Program", programStatus: "active", feedUnavailable: true },
+  // careers.walmart.com is a Next.js CSR app with no public JSON API
+  { name: "Walmart", slug: "walmart", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
   { name: "Capital One", slug: "capitalone", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "capitalone.wd12.myworkdayjobs.com", company: "capitalone", tenant: "Capital_One" } },
   { name: "Atlassian", slug: "atlassian", ats: "custom", programName: "APM Program", programStatus: "active" },
-  { name: "Shopify", slug: "shopify", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "shopify.wd5.myworkdayjobs.com", company: "shopify", tenant: "Shopify" } },
-  { name: "Zynga", slug: "zynga", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "zynga.wd1.myworkdayjobs.com", company: "zynga", tenant: "Zynga_External" } },
-  { name: "IBM", slug: "ibm", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "ibm.wd3.myworkdayjobs.com", company: "ibm", tenant: "IBMExternalSite" } },
+  // Shopify uses a private Ashby board (401); no Workday tenant responds 
+  { name: "Shopify", slug: "shopify", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
+  // careers.zynga.com is unreachable; jobs.zynga.com has no job-search API
+  { name: "Zynga", slug: "zynga", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
+  // careers.ibm.com returns HTML for all API paths (iCIMS, no public JSON endpoint)
+  { name: "IBM", slug: "ibm", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
   { name: "Yahoo", slug: "yahoo", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "ouryahoo.wd5.myworkdayjobs.com", company: "ouryahoo", tenant: "careers" } },
-  { name: "Microsoft", slug: "microsoft", ats: "workday", programName: "Microsoft PM Program", programStatus: "paused", workday: { host: "microsoft.wd1.myworkdayjobs.com", company: "microsoft", tenant: "External_Career_Site" } },
+  // gcsservices.careers.microsoft.com is network-unreachable from server-side; program is also paused
+  { name: "Microsoft", slug: "microsoft", ats: "custom", programName: "Microsoft PM Program", programStatus: "paused", feedUnavailable: true },
   // Custom
   { name: "Google", slug: "google", ats: "custom", programName: "APM Program", programStatus: "active" },
   { name: "Uber", slug: "uber", ats: "custom", programName: "APM Program", programStatus: "active" },

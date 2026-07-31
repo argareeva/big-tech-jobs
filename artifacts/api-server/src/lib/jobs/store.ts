@@ -1,10 +1,11 @@
 import { COMPANIES, type CompanyConfig } from "./companies";
-import { fetchForCompany, type NormalizedJob } from "./fetchers";
+import { fetchForCompany, FEED_UNAVAILABLE, type NormalizedJob } from "./fetchers";
 
 export interface CompanyStatus {
   config: CompanyConfig;
   jobCount: number;
   lastCheckedAt: string | null;
+  /** null = ok, "unavailable" = feed blocked server-side, any other string = fetch error */
   error: string | null;
 }
 
@@ -15,7 +16,15 @@ interface Logger {
 
 const jobs = new Map<string, NormalizedJob[]>(); // companySlug -> jobs
 const status = new Map<string, CompanyStatus>(
-  COMPANIES.map((c) => [c.slug, { config: c, jobCount: 0, lastCheckedAt: null, error: null }]),
+  COMPANIES.map((c) => [
+    c.slug,
+    {
+      config: c,
+      jobCount: 0,
+      lastCheckedAt: c.feedUnavailable ? "unavailable" : null,
+      error: c.feedUnavailable ? "unavailable" : null,
+    },
+  ]),
 );
 let lastRefreshAt: string | null = null;
 let inflight: Promise<RefreshSummary> | null = null;
@@ -70,8 +79,11 @@ async function doRefresh(log: Logger): Promise<RefreshSummary> {
   await Promise.all(
     COMPANIES.map(async (c) => {
       const st = status.get(c.slug)!;
+      // Skip unavailable feeds silently — keep their pre-set status
+      if (c.feedUnavailable) return;
       try {
         const result = await fetchForCompany(c);
+        if (result === FEED_UNAVAILABLE) return; // shouldn't happen, belt+suspenders
         jobs.set(c.slug, result);
         st.jobCount = result.length;
         st.lastCheckedAt = new Date().toISOString();

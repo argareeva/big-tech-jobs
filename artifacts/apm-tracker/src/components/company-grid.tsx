@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Company } from '@workspace/api-client-react';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, CheckCircle2, Pause } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Pause, WifiOff } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface CompanyGridProps {
@@ -39,7 +39,8 @@ export function CompanyGrid({ companies, onCompanyClick, selectedCompany, isLoad
       {companies.map((company, index) => {
         const isSelected = selectedCompany === company.slug;
         const isPaused = company.programStatus === 'paused';
-        const hasError = !!company.error;
+        const isUnavailable = company.error === 'unavailable';
+        const hasRealError = !!company.error && !isUnavailable;
         const isExpanded = expandedErrors.has(company.slug);
 
         return (
@@ -54,7 +55,7 @@ export function CompanyGrid({ companies, onCompanyClick, selectedCompany, isLoad
                   ? 'bg-primary/5 border-primary/60 shadow-sm'
                   : 'bg-card border-card-border hover:border-primary/30'
               }
-              ${isPaused ? 'opacity-60' : ''}
+              ${isPaused || isUnavailable ? 'opacity-60' : ''}
             `}
             style={{ animationDelay: `${index * 20}ms` }}
             data-testid={`company-${company.slug}`}
@@ -66,7 +67,9 @@ export function CompanyGrid({ companies, onCompanyClick, selectedCompany, isLoad
                 </h3>
                 {isPaused ? (
                   <Pause className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                ) : hasError ? (
+                ) : isUnavailable ? (
+                  <WifiOff className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                ) : hasRealError ? (
                   <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
                 ) : company.jobCount > 0 ? (
                   <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
@@ -81,17 +84,17 @@ export function CompanyGrid({ companies, onCompanyClick, selectedCompany, isLoad
                   {company.jobCount}
                 </Badge>
                 <span className="text-xs text-muted-foreground truncate">
-                  {isPaused ? 'Paused' : company.programName}
+                  {isPaused ? 'Paused' : isUnavailable ? 'No feed' : company.programName}
                 </span>
               </div>
 
-              {company.lastCheckedAt && (
+              {!isUnavailable && company.lastCheckedAt && (
                 <div className="text-xs text-muted-foreground">
                   {formatDistanceToNow(new Date(company.lastCheckedAt), { addSuffix: true })}
                 </div>
               )}
 
-              {hasError && (
+              {hasRealError && (
                 <span
                   role="button"
                   tabIndex={0}
@@ -113,7 +116,7 @@ export function CompanyGrid({ companies, onCompanyClick, selectedCompany, isLoad
               )}
             </div>
 
-            {hasError && isExpanded && (
+            {hasRealError && isExpanded && (
               <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-destructive/10 border border-destructive/20 rounded-md z-10 text-xs text-foreground">
                 {company.error}
               </div>

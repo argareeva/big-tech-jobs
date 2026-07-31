@@ -252,7 +252,12 @@ export async function fetchUber(c: CompanyConfig): Promise<NormalizedJob[]> {
     }));
 }
 
-export async function fetchForCompany(c: CompanyConfig): Promise<NormalizedJob[]> {
+export const FEED_UNAVAILABLE = Symbol("FEED_UNAVAILABLE");
+
+export async function fetchForCompany(
+  c: CompanyConfig,
+): Promise<NormalizedJob[] | typeof FEED_UNAVAILABLE> {
+  if (c.feedUnavailable) return FEED_UNAVAILABLE;
   switch (c.ats) {
     case "greenhouse":
       return fetchGreenhouse(c);
