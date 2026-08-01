@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Search, RefreshCw, Loader2 } from 'lucide-react';
+import { Search, RefreshCw, Loader2, Mail } from 'lucide-react';
 import {
   useListJobs,
   useListCompanies,
   useGetJobStats,
   useRefreshJobs,
+  useSendDigest,
   getListJobsQueryKey,
   getListCompaniesQueryKey,
   getGetJobStatsQueryKey,
@@ -29,6 +30,31 @@ export default function Dashboard() {
 
   const { data: companies, isLoading: companiesLoading } = useListCompanies();
   const { data: stats, isLoading: statsLoading } = useGetJobStats();
+
+  const digestMutation = useSendDigest({
+    mutation: {
+      onSuccess: (result) => {
+        if (result.skipped) {
+          toast({
+            title: 'No open roles right now',
+            description: 'Digest not sent — no open roles found across all feeds.',
+          });
+        } else {
+          toast({
+            title: 'Digest sent!',
+            description: `${result.totalJobs} role${result.totalJobs !== 1 ? 's' : ''} across ${result.companiesWithJobs} companies sent to your inbox.`,
+          });
+        }
+      },
+      onError: () => {
+        toast({
+          title: 'Failed to send digest',
+          description: 'Check that RESEND_API_KEY and NOTIFY_EMAIL are set correctly.',
+          variant: 'destructive',
+        });
+      },
+    },
+  });
 
   const refreshMutation = useRefreshJobs({
     mutation: {
@@ -85,20 +111,38 @@ export default function Dashboard() {
               </p>
             </div>
 
-            <Button
-              onClick={handleRefresh}
-              disabled={refreshMutation.isPending}
-              size="sm"
-              className="gap-2"
-              data-testid="button-refresh-jobs"
-            >
-              {refreshMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              {refreshMutation.isPending ? 'Refreshing...' : 'Refresh'}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => digestMutation.mutate()}
+                disabled={digestMutation.isPending}
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                data-testid="button-send-digest"
+              >
+                {digestMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Mail className="w-4 h-4" />
+                )}
+                {digestMutation.isPending ? 'Sending...' : 'Send Digest'}
+              </Button>
+
+              <Button
+                onClick={handleRefresh}
+                disabled={refreshMutation.isPending}
+                size="sm"
+                className="gap-2"
+                data-testid="button-refresh-jobs"
+              >
+                {refreshMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                {refreshMutation.isPending ? 'Refreshing...' : 'Refresh'}
+              </Button>
+            </div>
           </div>
         </div>
       </header>
