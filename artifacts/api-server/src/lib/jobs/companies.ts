@@ -15,7 +15,13 @@ export interface CompanyConfig {
   /** Greenhouse/Lever board slug */
   boardSlug?: string;
   /** Workday: host like "meta.wd1.myworkdayjobs.com" and tenant site name */
-  workday?: { host: string; tenant: string; company: string };
+  workday?: {
+    host: string;
+    tenant: string;
+    company: string;
+    /** Override the default "associate product manager" search text */
+    searchText?: string;
+  };
 }
 
 export const COMPANIES: CompanyConfig[] = [
@@ -51,4 +57,18 @@ export const COMPANIES: CompanyConfig[] = [
   // Custom
   { name: "Google", slug: "google", ats: "custom", programName: "APM Program", programStatus: "active" },
   { name: "Uber", slug: "uber", ats: "custom", programName: "APM Program", programStatus: "active" },
+  // Batch 2 additions
+  // Stripe — Greenhouse board confirmed live
+  { name: "Stripe", slug: "stripe", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "stripe" },
+  // Databricks — Greenhouse board confirmed live (1 APM job as of research)
+  { name: "Databricks", slug: "databricks", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "databricks" },
+  // PayPal — Workday wd1 tenant=jobs; custom searchText to surface GBLP when open
+  { name: "PayPal", slug: "paypal", ats: "workday", programName: "GBLP", programStatus: "active",
+    workday: { host: "paypal.wd1.myworkdayjobs.com", company: "paypal", tenant: "jobs", searchText: "graduate business leadership" } },
+  // American Express — careers.americanexpress.com (Oracle ORC) and Avature both
+  // block server-side requests; Eightfold domain is network-unreachable from server.
+  { name: "American Express", slug: "amex", ats: "custom", programName: "TRP", programStatus: "active", feedUnavailable: true },
+  // JPMorgan Chase — careers.jpmorgan.com is Adobe Experience Manager (AEM) and
+  // returns HTML for every API path; no JSON endpoint is publicly exposed.
+  { name: "JPMorgan Chase", slug: "jpmorgan", ats: "custom", programName: "CB Innovation / Chase Associate", programStatus: "active", feedUnavailable: true },
 ];

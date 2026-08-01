@@ -12,15 +12,26 @@ export interface NormalizedJob {
 }
 
 const APM_KEYWORDS =
-  /\b(associate product manager|rotational product manager|apm|rpm)\b/i;
+  /\b(associate product manager|rotational product manager|graduate business leadership|apm|rpm)\b/i;
 
 // RPM also means "revolutions per minute"/"remote patient monitoring" in some titles;
 // require "product" context when matching bare apm/rpm acronyms.
 export function isApmTitle(title: string): boolean {
   const t = title.toLowerCase();
   if (t.includes("associate product manager") || t.includes("rotational product manager")) return true;
+  if (t.includes("graduate business leadership")) return true; // PayPal GBLP
   if (/\b(apm|rpm)\b/i.test(t) && t.includes("product")) return true;
   return false;
+}
+
+/**
+ * When a company config supplies a custom searchText, any result from that
+ * targeted Workday search should be trusted without the generic isApmTitle
+ * filter — the search already narrows to the right program.
+ */
+export function isApmTitleOrCustomSearch(title: string, customSearch?: string): boolean {
+  if (customSearch) return true; // trust the Workday search narrowing
+  return isApmTitle(title);
 }
 
 const FETCH_TIMEOUT_MS = 15000;
@@ -78,6 +89,7 @@ export async function fetchLever(c: CompanyConfig): Promise<NormalizedJob[]> {
 export async function fetchWorkday(c: CompanyConfig): Promise<NormalizedJob[]> {
   const wd = c.workday;
   if (!wd) throw new Error(`Missing workday config for ${c.slug}`);
+  const searchText = wd.searchText ?? "associate product manager";
   const data = (await fetchJson(
     `https://${wd.host}/wday/cxs/${wd.company}/${wd.tenant}/jobs`,
     {
@@ -87,12 +99,12 @@ export async function fetchWorkday(c: CompanyConfig): Promise<NormalizedJob[]> {
         appliedFacets: {},
         limit: 20,
         offset: 0,
-        searchText: "associate product manager",
+        searchText,
       }),
     },
   )) as { jobPostings?: Array<{ title: string; externalPath: string; locationsText?: string; postedOn?: string; bulletFields?: string[] }> };
   return (data.jobPostings ?? [])
-    .filter((j) => j.title && isApmTitle(j.title))
+    .filter((j) => j.title && isApmTitleOrCustomSearch(j.title, wd.searchText))
     .map((j) => ({
       id: `${c.slug}-${j.bulletFields?.[0] ?? j.externalPath}`,
       title: j.title,
