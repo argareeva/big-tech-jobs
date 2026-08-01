@@ -62,6 +62,23 @@ export interface RefreshResult {
   refreshedAt: string;
 }
 
+export interface DigestResult {
+  ok: boolean;
+  /** true when no open roles were found and no email was sent */
+  skipped: boolean;
+  /** @nullable */
+  message?: string | null;
+  totalJobs?: number;
+  companiesWithJobs?: number;
+  /**
+     * Resend email ID on success
+     * @nullable
+     */
+  emailId?: string | null;
+  /** @nullable */
+  error?: string | null;
+}
+
 export interface JobStats {
   totalJobs: number;
   companiesWithJobs: number;

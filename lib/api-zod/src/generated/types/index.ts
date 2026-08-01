@@ -7,6 +7,7 @@
  */
 
 export * from './company';
+export * from './digestResult';
 export * from './healthStatus';
 export * from './job';
 export * from './jobStats';

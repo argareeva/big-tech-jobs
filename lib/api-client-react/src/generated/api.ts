@@ -21,6 +21,7 @@ import type {
 
 import type {
   Company,
+  DigestResult,
   HealthStatus,
   Job,
   JobStats,
@@ -364,6 +365,77 @@ export function useGetJobStats<TData = Awaited<ReturnType<typeof getJobStats>>, 
 
 
 
+
+export const getSendDigestUrl = () => {
+
+
+
+
+  return `/api/jobs/digest`
+}
+
+/**
+ * @summary Fetch fresh job listings and send the morning digest email via Resend
+ */
+export const sendDigest = async ( options?: Parameters<typeof customFetch>[1]): Promise<DigestResult> => {
+
+  return customFetch<DigestResult>(getSendDigestUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSendDigestMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDigest>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendDigest>>, TError,void, TContext> => {
+
+const mutationKey = ['sendDigest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendDigest>>, void> = () => {
+
+
+          return  sendDigest(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendDigestMutationResult = NonNullable<Awaited<ReturnType<typeof sendDigest>>>
+
+    export type SendDigestMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Fetch fresh job listings and send the morning digest email via Resend
+ */
+export const useSendDigest = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDigest>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendDigest>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSendDigestMutationOptions(options));
+    }
 
 export const getListCompaniesUrl = () => {
 
