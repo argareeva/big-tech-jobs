@@ -61,6 +61,15 @@ export const COMPANIES: CompanyConfig[] = [
   // walmart.wd5.myworkdayjobs.com/WalmartExternal Workday tenant now 404s/loops —
   // Walmart appears to have migrated off that Workday site with no public replacement found.
   { name: "Walmart", slug: "walmart", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
+  // Sam's Club was expected to share Walmart's Workday tenant (walmart.wd5.myworkdayjobs.com),
+  // but that tenant is confirmed dead (every plausible tenant name — WalmartExternal, Walmart,
+  // External, Careers, WalmartCareers — returns HTTP 303 redirect-to-nowhere) and
+  // careers.walmart.com itself is unreachable. Sam's Club's actual ATS is unknown; needs a
+  // future browser-based network capture to find it. Not fabricating a working endpoint here.
+  { name: "Sam's Club", slug: "samsclub", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
+  // T-Mobile — Workday tenant confirmed live: POST returns 200 with ~2000 postings.
+  { name: "T-Mobile", slug: "tmobile", ats: "workday", programName: "APM Program", programStatus: "active",
+    workday: { host: "tmobile.wd1.myworkdayjobs.com", company: "tmobile", tenant: "external" } },
   { name: "Capital One", slug: "capitalone", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "capitalone.wd12.myworkdayjobs.com", company: "capitalone", tenant: "Capital_One" } },
   { name: "Atlassian", slug: "atlassian", ats: "custom", programName: "APM Program", programStatus: "active" },
   // shopify.com/careers is a custom client-rendered app (pre-hydration monitor
