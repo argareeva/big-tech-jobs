@@ -101,4 +101,16 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "JPMorgan Chase", slug: "jpmorgan", ats: "oracle", programName: "CB Innovation / Chase Associate", programStatus: "active",
     oracle: { host: "jpmc.fa.oraclecloud.com", siteNumber: "CX_1001", keyword: "chase associate program",
       titleMatch: /chase associate program|innovation development program|commercial banking innovation/i } },
+  // Batch 3 additions — Greenhouse boards confirmed live
+  { name: "Samsara", slug: "samsara", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "samsara" },
+  { name: "Figma", slug: "figma", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "figma" },
+  // StubHub — token is "stubhubinc", not "stubhub" (404s). Careers page is EU-hosted
+  // (job-boards.eu.greenhouse.io/stubhubinc) but the standard boards-api.greenhouse.io
+  // host still returns 200 with real data for this token; no host override needed.
+  { name: "StubHub", slug: "stubhub", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "stubhubinc" },
+  // IXL Learning — board also carries sibling-brand postings (e.g. Rosetta Stone)
+  // since IXL Learning is the parent company; this is expected, not a wrong token.
+  { name: "IXL Learning", slug: "ixl-learning", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "ixllearning" },
+  { name: "Roblox", slug: "roblox", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "roblox" },
+  { name: "Duolingo", slug: "duolingo", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "duolingo" },
 ];
