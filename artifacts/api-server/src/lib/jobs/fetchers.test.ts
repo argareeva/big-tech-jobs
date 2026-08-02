@@ -1,6 +1,112 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchWalmart, fetchSamsClub, fetchDisney, fetchIntuit } from "./fetchers.js";
+import {
+  fetchWalmart,
+  fetchSamsClub,
+  fetchDisney,
+  fetchIntuit,
+  isApmTitle,
+  isInternshipTitle,
+  isApmTitleOrCustomSearch,
+} from "./fetchers.js";
 import type { CompanyConfig } from "./companies.js";
+
+// ---------------------------------------------------------------------------
+// isInternshipTitle
+// ---------------------------------------------------------------------------
+
+describe("isInternshipTitle", () => {
+  it.each([
+    ["intern suffix", "Associate Product Manager Intern"],
+    ["internship word", "APM Internship Program"],
+    ["co-op hyphenated", "Product Co-op"],
+    ["coop no hyphen", "Product Coop"],
+    ["summer associate", "Summer Associate PM"],
+    ["summer analyst", "Summer Analyst, Product"],
+  ])("returns true for internship title: %s", (_label, title) => {
+    expect(isInternshipTitle(title)).toBe(true);
+  });
+
+  it.each([
+    ["full-time APM", "Associate Product Manager"],
+    ["rotational PM", "Rotational Product Manager"],
+    ["senior engineer", "Senior Software Engineer"],
+    ["graduate leadership", "Graduate Business Leadership Program Manager"],
+    ["bare APM product context", "APM – Product"],
+  ])("returns false for non-internship title: %s", (_label, title) => {
+    expect(isInternshipTitle(title)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isApmTitle — true positives
+// ---------------------------------------------------------------------------
+
+describe("isApmTitle — true positives", () => {
+  it.each([
+    ["exact match", "Associate Product Manager"],
+    ["case insensitive", "associate product manager"],
+    ["with dash suffix", "Associate Product Manager – Growth"],
+    ["rotational", "Rotational Product Manager"],
+    ["rotational with suffix", "Rotational Product Manager, Platforms"],
+    ["PayPal GBLP", "Graduate Business Leadership Program Manager"],
+    ["GBLP case insensitive", "graduate business leadership program"],
+    ["bare APM with product", "APM – Product"],
+    ["APM product in title", "APM, Product Growth"],
+    ["RPM with product", "RPM Product Manager"],
+    ["apm lowercase with product", "Senior apm, product track"],
+  ])("matches: %s → %s", (_label, title) => {
+    expect(isApmTitle(title)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isApmTitle — true negatives
+// ---------------------------------------------------------------------------
+
+describe("isApmTitle — true negatives", () => {
+  it.each([
+    ["internship excluded", "Associate Product Manager Intern"],
+    ["APM DevOps no product", "APM DevOps Engineer"],
+    ["APM Tools no product", "APM Tools Engineer"],
+    ["remote patient monitoring", "Remote Patient Monitoring Manager"],
+    ["RPM revolutions no product", "RPM Technician"],
+    ["senior engineer unrelated", "Senior Software Engineer"],
+    ["staff data scientist", "Staff Data Scientist"],
+    ["partial word apm in company", "Campaign Manager"],
+    ["rpm in non-product context", "RPM Operations Lead"],
+    ["graduate without business leadership", "Graduate Software Engineer"],
+    ["APM intern still excluded", "APM Product Intern"],
+    ["co-op excluded", "Associate Product Manager Co-op"],
+  ])("rejects: %s → %s", (_label, title) => {
+    expect(isApmTitle(title)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isApmTitleOrCustomSearch
+// ---------------------------------------------------------------------------
+
+describe("isApmTitleOrCustomSearch", () => {
+  it("passes through to isApmTitle when no customSearch is provided", () => {
+    expect(isApmTitleOrCustomSearch("Associate Product Manager")).toBe(true);
+    expect(isApmTitleOrCustomSearch("Senior Software Engineer")).toBe(false);
+  });
+
+  it("returns true for any non-internship title when customSearch is provided", () => {
+    expect(isApmTitleOrCustomSearch("Senior Software Engineer", "associate product manager")).toBe(true);
+    expect(isApmTitleOrCustomSearch("Staff Data Scientist", "APM Program")).toBe(true);
+  });
+
+  it("still rejects internship titles even when customSearch is provided", () => {
+    expect(isApmTitleOrCustomSearch("Associate Product Manager Intern", "associate product manager")).toBe(false);
+    expect(isApmTitleOrCustomSearch("APM Internship", "APM")).toBe(false);
+    expect(isApmTitleOrCustomSearch("Product Manager Co-op", "product manager")).toBe(false);
+  });
+
+  it("returns false for internship with no customSearch", () => {
+    expect(isApmTitleOrCustomSearch("Associate Product Manager Intern")).toBe(false);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Fixture data
