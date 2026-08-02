@@ -415,7 +415,14 @@ export async function fetchAshby(c: CompanyConfig): Promise<NormalizedJob[]> {
       publishedAt?: string;
     }>;
   };
-  return (data.jobs ?? [])
+  if (!Array.isArray(data.jobs)) {
+    throw new Error(
+      `fetchAshby: response envelope changed for board "${c.ashbyBoardName}" — ` +
+        `"jobs" is ${data.jobs === undefined ? "missing" : `not an array (got ${typeof data.jobs})`}. ` +
+        `The Ashby posting-api schema may have been updated.`,
+    );
+  }
+  return data.jobs
     .filter((j) => isApmTitle(j.title))
     .map((j) => ({
       id: `${c.slug}-${j.id}`,

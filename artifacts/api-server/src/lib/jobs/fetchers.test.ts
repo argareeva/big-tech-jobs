@@ -6,6 +6,7 @@ import {
   fetchIntuit,
   fetchGoogle,
   fetchUber,
+  fetchAshby,
   isApmTitle,
   isInternshipTitle,
   isApmTitleOrCustomSearch,
@@ -883,5 +884,186 @@ describe("fetchUber — JSON API parser (regression / silent-zero prevention)", 
   it("throws when the HTTP response is non-2xx", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
     await expect(fetchUber(uberConfig)).rejects.toThrow("HTTP 503");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchAshby — JSON API parser regression tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a minimal Ashby posting-api job-board response fixture.
+ * Shape: { jobs: [...] }
+ */
+function makeAshbyResponse(
+  jobs: Array<{
+    id: string;
+    title: string;
+    location?: string;
+    applyUrl: string;
+    publishedAt?: string;
+  }>,
+) {
+  return { jobs };
+}
+
+const ASHBY_JOBS = [
+  // APM — should be included
+  {
+    id: "abc-001",
+    title: "Associate Product Manager",
+    location: "San Francisco, CA",
+    applyUrl: "https://jobs.ashbyhq.com/Perplexity/abc-001",
+    publishedAt: "2026-06-01T00:00:00.000Z",
+  },
+  // Rotational PM variant — should be included
+  {
+    id: "abc-002",
+    title: "Rotational Product Manager",
+    location: "New York, NY",
+    applyUrl: "https://jobs.ashbyhq.com/Perplexity/abc-002",
+    publishedAt: "2026-06-02T00:00:00.000Z",
+  },
+  // Non-APM title — excluded by isApmTitle
+  {
+    id: "abc-003",
+    title: "Senior Software Engineer",
+    location: "Remote",
+    applyUrl: "https://jobs.ashbyhq.com/Perplexity/abc-003",
+    publishedAt: "2026-06-03T00:00:00.000Z",
+  },
+  // Internship — excluded even though it mentions APM
+  {
+    id: "abc-004",
+    title: "Associate Product Manager Intern",
+    location: "San Francisco, CA",
+    applyUrl: "https://jobs.ashbyhq.com/Perplexity/abc-004",
+    publishedAt: "2026-06-04T00:00:00.000Z",
+  },
+  // APM with missing location — falls back to "Unspecified"
+  {
+    id: "abc-005",
+    title: "Associate Product Manager",
+    applyUrl: "https://jobs.ashbyhq.com/Perplexity/abc-005",
+  },
+];
+
+const ashbyConfig: CompanyConfig = {
+  name: "Perplexity",
+  slug: "perplexity",
+  ats: "ashby",
+  programName: "Perplexity APM",
+  programStatus: "active",
+  ashbyBoardName: "Perplexity",
+};
+
+describe("fetchAshby — outgoing request shape", () => {
+  it("GETs the correct Ashby posting-api URL for the board name", async () => {
+    const mockFetch = stubFetch(makeAshbyResponse(ASHBY_JOBS));
+    await fetchAshby(ashbyConfig);
+
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.ashbyhq.com/posting-api/job-board/Perplexity");
+  });
+});
+
+describe("fetchAshby — JSON API parser (regression / silent-zero prevention)", () => {
+  it("parses at least one APM job from a fixture matching the current response shape", async () => {
+    stubFetch(makeAshbyResponse(ASHBY_JOBS));
+    const jobs = await fetchAshby(ashbyConfig);
+    expect(jobs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns exactly 3 APM jobs from the fixture (2× Associate + 1× Rotational, no location on one)", async () => {
+    stubFetch(makeAshbyResponse(ASHBY_JOBS));
+    const jobs = await fetchAshby(ashbyConfig);
+    expect(jobs.length).toBe(3);
+  });
+
+  it("excludes non-APM titles (Senior Software Engineer)", async () => {
+    stubFetch(makeAshbyResponse(ASHBY_JOBS));
+    const jobs = await fetchAshby(ashbyConfig);
+    expect(jobs.some((j) => /software engineer/i.test(j.title))).toBe(false);
+  });
+
+  it("excludes internship titles even when they mention APM", async () => {
+    stubFetch(makeAshbyResponse(ASHBY_JOBS));
+    const jobs = await fetchAshby(ashbyConfig);
+    expect(jobs.some((j) => /intern/i.test(j.title))).toBe(false);
+  });
+
+  it("maps id, title, location, applyUrl, source, and postedOn fields correctly", async () => {
+    stubFetch(makeAshbyResponse(ASHBY_JOBS));
+    const jobs = await fetchAshby(ashbyConfig);
+    const job = jobs.find((j) => j.id === "perplexity-abc-001");
+
+    expect(job).toBeDefined();
+    expect(job!.title).toBe("Associate Product Manager");
+    expect(job!.location).toBe("San Francisco, CA");
+    expect(job!.applyUrl).toBe("https://jobs.ashbyhq.com/Perplexity/abc-001");
+    expect(job!.source).toBe("ashby");
+    expect(job!.companySlug).toBe("perplexity");
+    expect(job!.postedOn).toBe("2026-06-01");
+  });
+
+  it("falls back to 'Unspecified' when location is absent", async () => {
+    stubFetch(makeAshbyResponse(ASHBY_JOBS));
+    const jobs = await fetchAshby(ashbyConfig);
+    const job = jobs.find((j) => j.id === "perplexity-abc-005");
+
+    expect(job).toBeDefined();
+    expect(job!.location).toBe("Unspecified");
+  });
+
+  it("sets postedOn to null when publishedAt is absent", async () => {
+    stubFetch(makeAshbyResponse(ASHBY_JOBS));
+    const jobs = await fetchAshby(ashbyConfig);
+    const job = jobs.find((j) => j.id === "perplexity-abc-005");
+
+    expect(job).toBeDefined();
+    expect(job!.postedOn).toBeNull();
+  });
+
+  it("slices publishedAt ISO string to YYYY-MM-DD for postedOn", async () => {
+    stubFetch(makeAshbyResponse([{
+      id: "abc-010",
+      title: "Associate Product Manager",
+      location: "Remote",
+      applyUrl: "https://jobs.ashbyhq.com/Perplexity/abc-010",
+      publishedAt: "2026-07-15T12:34:56.789Z",
+    }]));
+    const jobs = await fetchAshby(ashbyConfig);
+    expect(jobs[0].postedOn).toBe("2026-07-15");
+  });
+
+  it("returns an empty array (not an error) when jobs array is genuinely empty", async () => {
+    stubFetch(makeAshbyResponse([]));
+    const jobs = await fetchAshby(ashbyConfig);
+    expect(jobs).toEqual([]);
+  });
+
+  it("throws (not silent zero) when the jobs key is absent from the response", async () => {
+    stubFetch({});
+    await expect(fetchAshby(ashbyConfig)).rejects.toThrow(/envelope changed|jobs.*missing/i);
+  });
+
+  it("throws (not silent zero) when jobs is a non-array value (e.g. object)", async () => {
+    stubFetch({ jobs: { unexpected: "object" } });
+    await expect(fetchAshby(ashbyConfig)).rejects.toThrow(/envelope changed|not an array/i);
+  });
+
+  it("throws (not silent zero) when jobs is null", async () => {
+    stubFetch({ jobs: null });
+    await expect(fetchAshby(ashbyConfig)).rejects.toThrow(/envelope changed|not an array/i);
+  });
+
+  it("throws when the HTTP response is non-2xx", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    await expect(fetchAshby(ashbyConfig)).rejects.toThrow("HTTP 404");
+  });
+
+  it("throws when the HTTP response is 500", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    await expect(fetchAshby(ashbyConfig)).rejects.toThrow("HTTP 500");
   });
 });
