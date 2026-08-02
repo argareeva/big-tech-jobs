@@ -128,7 +128,14 @@ export async function fetchWorkday(c: CompanyConfig): Promise<NormalizedJob[]> {
       }),
     },
   )) as { jobPostings?: Array<{ title: string; externalPath: string; locationsText?: string; postedOn?: string; bulletFields?: string[] }> };
-  return (data.jobPostings ?? [])
+  if (!Array.isArray(data.jobPostings)) {
+    throw new Error(
+      `fetchWorkday: response envelope changed for ${wd.company}/${wd.tenant} — ` +
+        `"jobPostings" is ${data.jobPostings === undefined ? "missing" : `not an array (got ${typeof data.jobPostings})`}. ` +
+        `The Workday CXS API schema may have been updated.`,
+    );
+  }
+  return data.jobPostings
     .filter((j) => j.title && isApmTitleOrCustomSearch(j.title, wd.searchText))
     .map((j) => ({
       id: `${c.slug}-${j.bulletFields?.[0] ?? j.externalPath}`,

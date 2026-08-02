@@ -9,6 +9,7 @@ import {
   fetchAshby,
   fetchLever,
   fetchGreenhouse,
+  fetchWorkday,
   isApmTitle,
   isInternshipTitle,
   isApmTitleOrCustomSearch,
@@ -1446,5 +1447,287 @@ describe("fetchGreenhouse — JSON API parser (regression / silent-zero preventi
   it("throws when the HTTP response is 500", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
     await expect(fetchGreenhouse(greenhouseConfig)).rejects.toThrow("HTTP 500");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchWorkday — JSON API parser regression tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a minimal Workday CXS jobs endpoint response fixture.
+ * Shape: { jobPostings: [...] }
+ */
+function makeWorkdayResponse(
+  jobPostings: Array<{
+    title: string;
+    externalPath: string;
+    locationsText?: string;
+    postedOn?: string;
+    bulletFields?: string[];
+  }>,
+) {
+  return { jobPostings };
+}
+
+const WORKDAY_POSTINGS = [
+  // APM — should be included
+  {
+    title: "Associate Product Manager",
+    externalPath: "/job/Salesforce/Associate-Product-Manager_JR001",
+    locationsText: "San Francisco, CA",
+    postedOn: "2026-06-01",
+    bulletFields: ["REQ-001"],
+  },
+  // Rotational PM variant — should be included
+  {
+    title: "Rotational Product Manager",
+    externalPath: "/job/Salesforce/Rotational-Product-Manager_JR002",
+    locationsText: "New York, NY",
+    postedOn: "2026-06-02",
+    bulletFields: ["REQ-002"],
+  },
+  // Non-APM title — excluded by isApmTitleOrCustomSearch when no customSearch
+  {
+    title: "Senior Software Engineer",
+    externalPath: "/job/Salesforce/Senior-Software-Engineer_JR003",
+    locationsText: "Seattle, WA",
+    postedOn: "2026-06-03",
+  },
+  // Internship — excluded even though it mentions APM
+  {
+    title: "Associate Product Manager Intern",
+    externalPath: "/job/Salesforce/APM-Intern_JR004",
+    locationsText: "Austin, TX",
+    postedOn: "2026-06-04",
+  },
+  // APM with no location — falls back to "Unspecified"
+  {
+    title: "Associate Product Manager",
+    externalPath: "/job/Salesforce/Associate-Product-Manager_JR005",
+    bulletFields: ["REQ-005"],
+  },
+];
+
+const workdayConfig: CompanyConfig = {
+  name: "Salesforce",
+  slug: "salesforce",
+  ats: "workday",
+  programName: "Salesforce APM",
+  programStatus: "active",
+  workday: {
+    host: "salesforce.wd12.myworkdayjobs.com",
+    company: "salesforce",
+    tenant: "External_Career_Site",
+  },
+};
+
+/** Workday config with a custom searchText (bypasses isApmTitle for non-internship titles) */
+const workdayCustomSearchConfig: CompanyConfig = {
+  name: "T-Mobile",
+  slug: "tmobile",
+  ats: "workday",
+  programName: "T-Mobile APM",
+  programStatus: "active",
+  workday: {
+    host: "tmobile.wd1.myworkdayjobs.com",
+    company: "tmobile",
+    tenant: "external",
+    searchText: "associate product manager",
+  },
+};
+
+describe("fetchWorkday — outgoing request shape", () => {
+  it("POSTs to the correct Workday CXS jobs endpoint", async () => {
+    const mockFetch = stubFetch(makeWorkdayResponse(WORKDAY_POSTINGS));
+    await fetchWorkday(workdayConfig);
+
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://salesforce.wd12.myworkdayjobs.com/wday/cxs/salesforce/External_Career_Site/jobs",
+    );
+    expect(init.method).toBe("POST");
+  });
+
+  it("sends the default searchText 'associate product manager' when none is configured", async () => {
+    const mockFetch = stubFetch(makeWorkdayResponse(WORKDAY_POSTINGS));
+    await fetchWorkday(workdayConfig);
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as { searchText: string };
+    expect(body.searchText).toBe("associate product manager");
+  });
+
+  it("sends a custom searchText when configured", async () => {
+    const mockFetch = stubFetch(makeWorkdayResponse(WORKDAY_POSTINGS));
+    await fetchWorkday(workdayCustomSearchConfig);
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as { searchText: string };
+    expect(body.searchText).toBe("associate product manager");
+  });
+
+  it("sends the expected request body shape (appliedFacets, limit, offset)", async () => {
+    const mockFetch = stubFetch(makeWorkdayResponse(WORKDAY_POSTINGS));
+    await fetchWorkday(workdayConfig);
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as {
+      appliedFacets: unknown;
+      limit: number;
+      offset: number;
+      searchText: string;
+    };
+    expect(body.appliedFacets).toEqual({});
+    expect(body.limit).toBe(20);
+    expect(body.offset).toBe(0);
+  });
+});
+
+describe("fetchWorkday — response shape guard (silent-zero prevention)", () => {
+  it("throws (not silent zero) when jobPostings key is absent from the response", async () => {
+    stubFetch({});
+    await expect(fetchWorkday(workdayConfig)).rejects.toThrow(
+      /envelope changed|jobPostings.*missing/i,
+    );
+  });
+
+  it("throws (not silent zero) when jobPostings is null", async () => {
+    stubFetch({ jobPostings: null });
+    await expect(fetchWorkday(workdayConfig)).rejects.toThrow(
+      /envelope changed|not an array/i,
+    );
+  });
+
+  it("throws (not silent zero) when jobPostings is a non-array object", async () => {
+    stubFetch({ jobPostings: { unexpected: "object" } });
+    await expect(fetchWorkday(workdayConfig)).rejects.toThrow(
+      /envelope changed|not an array/i,
+    );
+  });
+
+  it("throws a useful error on 422 (bad tenant) rather than returning an empty result", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 422 }),
+    );
+    await expect(fetchWorkday(workdayConfig)).rejects.toThrow("HTTP 422");
+  });
+
+  it("throws when the HTTP response is non-2xx (e.g. 503)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 503 }),
+    );
+    await expect(fetchWorkday(workdayConfig)).rejects.toThrow("HTTP 503");
+  });
+
+  it("returns an empty array (not an error) when jobPostings is a genuinely empty array", async () => {
+    stubFetch(makeWorkdayResponse([]));
+    await expect(fetchWorkday(workdayConfig)).resolves.toEqual([]);
+  });
+});
+
+describe("fetchWorkday — APM title filtering and field mapping", () => {
+  it("parses at least one APM job from a fixture matching the current response shape", async () => {
+    stubFetch(makeWorkdayResponse(WORKDAY_POSTINGS));
+    const jobs = await fetchWorkday(workdayConfig);
+    expect(jobs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns exactly 3 APM jobs from the fixture (2× Associate + 1× Rotational, no location on one)", async () => {
+    stubFetch(makeWorkdayResponse(WORKDAY_POSTINGS));
+    const jobs = await fetchWorkday(workdayConfig);
+    expect(jobs.length).toBe(3);
+  });
+
+  it("excludes non-APM titles (Senior Software Engineer)", async () => {
+    stubFetch(makeWorkdayResponse(WORKDAY_POSTINGS));
+    const jobs = await fetchWorkday(workdayConfig);
+    expect(jobs.some((j) => /software engineer/i.test(j.title))).toBe(false);
+  });
+
+  it("excludes internship titles even when they mention APM", async () => {
+    stubFetch(makeWorkdayResponse(WORKDAY_POSTINGS));
+    const jobs = await fetchWorkday(workdayConfig);
+    expect(jobs.some((j) => /intern/i.test(j.title))).toBe(false);
+  });
+
+  it("maps id, title, location, applyUrl, source, and postedOn fields correctly", async () => {
+    stubFetch(makeWorkdayResponse(WORKDAY_POSTINGS));
+    const jobs = await fetchWorkday(workdayConfig);
+    const job = jobs.find((j) => j.id === "salesforce-REQ-001");
+
+    expect(job).toBeDefined();
+    expect(job!.title).toBe("Associate Product Manager");
+    expect(job!.location).toBe("San Francisco, CA");
+    expect(job!.applyUrl).toBe(
+      "https://salesforce.wd12.myworkdayjobs.com/en-US/External_Career_Site/job/Salesforce/Associate-Product-Manager_JR001",
+    );
+    expect(job!.source).toBe("workday");
+    expect(job!.companySlug).toBe("salesforce");
+    expect(job!.postedOn).toBe("2026-06-01");
+  });
+
+  it("falls back to externalPath for id when bulletFields is absent", async () => {
+    stubFetch(makeWorkdayResponse([
+      {
+        title: "Associate Product Manager",
+        externalPath: "/job/Salesforce/APM_JR999",
+        locationsText: "Remote",
+        postedOn: "2026-07-01",
+        // no bulletFields
+      },
+    ]));
+    const jobs = await fetchWorkday(workdayConfig);
+    expect(jobs[0].id).toBe("salesforce-/job/Salesforce/APM_JR999");
+  });
+
+  it("falls back to 'Unspecified' when locationsText is absent", async () => {
+    stubFetch(makeWorkdayResponse(WORKDAY_POSTINGS));
+    const jobs = await fetchWorkday(workdayConfig);
+    const job = jobs.find((j) => j.id === "salesforce-REQ-005");
+
+    expect(job).toBeDefined();
+    expect(job!.location).toBe("Unspecified");
+  });
+
+  it("sets postedOn to null when postedOn field is absent", async () => {
+    stubFetch(makeWorkdayResponse(WORKDAY_POSTINGS));
+    const jobs = await fetchWorkday(workdayConfig);
+    const job = jobs.find((j) => j.id === "salesforce-REQ-005");
+
+    expect(job).toBeDefined();
+    expect(job!.postedOn).toBeNull();
+  });
+
+  it("includes non-APM titles when customSearch is set (trusts the Workday search narrowing)", async () => {
+    // With customSearch, isApmTitleOrCustomSearch returns true for any non-internship title
+    stubFetch(makeWorkdayResponse([
+      {
+        title: "Senior Software Engineer",
+        externalPath: "/job/TMO/SWE_JR100",
+        locationsText: "Bellevue, WA",
+        postedOn: "2026-06-10",
+        bulletFields: ["REQ-100"],
+      },
+    ]));
+    const jobs = await fetchWorkday(workdayCustomSearchConfig);
+    // customSearch trusts the server-side search, so SWE title passes through
+    expect(jobs.length).toBe(1);
+    expect(jobs[0].title).toBe("Senior Software Engineer");
+  });
+
+  it("still excludes internship titles even when customSearch is set", async () => {
+    stubFetch(makeWorkdayResponse([
+      {
+        title: "Associate Product Manager Intern",
+        externalPath: "/job/TMO/APM-Intern_JR200",
+        locationsText: "Bellevue, WA",
+        bulletFields: ["REQ-200"],
+      },
+    ]));
+    const jobs = await fetchWorkday(workdayCustomSearchConfig);
+    expect(jobs).toEqual([]);
   });
 });
