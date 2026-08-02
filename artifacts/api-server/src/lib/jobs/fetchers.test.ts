@@ -4,6 +4,7 @@ import {
   fetchSamsClub,
   fetchDisney,
   fetchIntuit,
+  fetchGoogle,
   isApmTitle,
   isInternshipTitle,
   isApmTitleOrCustomSearch,
@@ -641,5 +642,112 @@ describe("fetchIntuit — HTML parser (regression / silent-zero prevention)", ()
   it("throws when the HTTP response is non-2xx", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
     await expect(fetchIntuit(intuitConfig)).rejects.toThrow("HTTP 404");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchGoogle — HTML parser regression tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal HTML fixture that matches the anchorRe + r0wTof patterns used in fetchGoogle:
+ *   anchorRe: /<a[^>]+href="(jobs\/results\/(\d+)[^"?]*)[^"]*"[^>]+aria-label="Learn more about ([^"]+)"[^>]*>/g
+ *   location: nearest preceding <span class="r0wTof ...">City, ST</span> within 4000 chars
+ */
+function makeGoogleHtml(
+  cards: Array<{ id: string; slug: string; title: string; location: string }>,
+): string {
+  return cards
+    .map(
+      (c) =>
+        `<li class="lLd3Je">` +
+        `\n  <span class="r0wTof">${c.location}</span>` +
+        `\n  <a href="jobs/results/${c.id}-${c.slug}" class="WpHeLc VfPpkd-mRLv6" aria-label="Learn more about ${c.title}">` +
+        `\n  </a>` +
+        `\n</li>`,
+    )
+    .join("\n");
+}
+
+const GOOGLE_CARDS = makeGoogleHtml([
+  // APM — should be included
+  { id: "100001", slug: "associate-product-manager", title: "Associate Product Manager", location: "Mountain View, CA, USA" },
+  // Rotational PM variant — should be included
+  { id: "100002", slug: "rotational-product-manager", title: "Rotational Product Manager", location: "New York, NY, USA" },
+  // Non-APM title — excluded by isApmTitle
+  { id: "100003", slug: "software-engineer", title: "Software Engineer", location: "Seattle, WA, USA" },
+  // Internship — excluded even though it mentions APM
+  { id: "100004", slug: "associate-product-manager-intern", title: "Associate Product Manager Intern", location: "Sunnyvale, CA, USA" },
+]);
+
+const googleConfig: CompanyConfig = {
+  name: "Google",
+  slug: "google",
+  ats: "custom",
+  programName: "Google APM",
+  programStatus: "active",
+};
+
+describe("fetchGoogle — HTML parser (regression / silent-zero prevention)", () => {
+  it("parses at least one APM job card from a fixture matching the current anchorRe", async () => {
+    stubFetchHtml(GOOGLE_CARDS);
+    const jobs = await fetchGoogle(googleConfig);
+    expect(jobs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns exactly 2 APM jobs from the fixture (Associate + Rotational PM)", async () => {
+    stubFetchHtml(GOOGLE_CARDS);
+    const jobs = await fetchGoogle(googleConfig);
+    expect(jobs.length).toBe(2);
+  });
+
+  it("excludes non-APM titles (Software Engineer)", async () => {
+    stubFetchHtml(GOOGLE_CARDS);
+    const jobs = await fetchGoogle(googleConfig);
+    expect(jobs.some((j) => /software engineer/i.test(j.title))).toBe(false);
+  });
+
+  it("excludes internship titles even when they mention APM", async () => {
+    stubFetchHtml(GOOGLE_CARDS);
+    const jobs = await fetchGoogle(googleConfig);
+    expect(jobs.some((j) => /intern/i.test(j.title))).toBe(false);
+  });
+
+  it("maps id, title, location, applyUrl, and source fields correctly", async () => {
+    stubFetchHtml(GOOGLE_CARDS);
+    const jobs = await fetchGoogle(googleConfig);
+    const job = jobs.find((j) => j.id === "google-100001");
+
+    expect(job).toBeDefined();
+    expect(job!.title).toBe("Associate Product Manager");
+    expect(job!.location).toBe("Mountain View, CA, USA");
+    expect(job!.applyUrl).toBe(
+      "https://www.google.com/about/careers/applications/jobs/results/100001-associate-product-manager",
+    );
+    expect(job!.source).toBe("google");
+    expect(job!.companySlug).toBe("google");
+  });
+
+  it("deduplicates cards with the same numeric id", async () => {
+    const html = makeGoogleHtml([
+      { id: "200001", slug: "associate-product-manager", title: "Associate Product Manager", location: "Mountain View, CA, USA" },
+      { id: "200001", slug: "associate-product-manager", title: "Associate Product Manager", location: "Mountain View, CA, USA" },
+    ]);
+    stubFetchHtml(html);
+    const jobs = await fetchGoogle(googleConfig);
+    expect(jobs.filter((j) => j.id === "google-200001").length).toBe(1);
+  });
+
+  it("returns an empty array (not an error) when no APM jobs are present", async () => {
+    stubFetchHtml(makeGoogleHtml([
+      { id: "300001", slug: "data-scientist", title: "Staff Data Scientist", location: "Seattle, WA, USA" },
+    ]));
+    const jobs = await fetchGoogle(googleConfig);
+    expect(jobs).toEqual([]);
+  });
+
+  it("throws when the HTTP response is non-2xx", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+    await expect(fetchGoogle(googleConfig)).rejects.toThrow("HTTP 403");
   });
 });
