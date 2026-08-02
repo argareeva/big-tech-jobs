@@ -461,6 +461,18 @@ export async function fetchDisney(c: CompanyConfig): Promise<NormalizedJob[]> {
 }
 
 /**
+ * The persisted GraphQL query ID used by careers.walmart.com for all
+ * Walmart-family job searches (Walmart, Sam's Club, Vizio). If Walmart
+ * rotates this ID, all three feeds will fail simultaneously with a
+ * "tool_messages missing" error. To re-discover the current ID: open
+ * careers.walmart.com in Chrome → DevTools → Network tab, search for any
+ * job, find the POST to /api/graphql, and copy "queryId" from the request
+ * payload. Update this constant — both fetchWalmartCareers and
+ * probeWalmartQueryId reference it.
+ */
+export const WALMART_CAREERS_QUERY_ID = "b0467c1f-f578-4261-9280-0ea4614f251c";
+
+/**
  * careers.walmart.com (shared Walmart + Sam's Club + Vizio careers site) is
  * backed by an AI job-search assistant GraphQL API rather than a plain
  * keyword search — confirmed server-accessible via plain fetch (no
@@ -474,7 +486,7 @@ async function fetchWalmartCareers(c: CompanyConfig, brand: string): Promise<Nor
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      queryId: "b0467c1f-f578-4261-9280-0ea4614f251c",
+      queryId: WALMART_CAREERS_QUERY_ID,
       variables: {
         chatRequest: {
           messages: [{ role: "user", content: [{ type: "text", text: `associate product manager at ${brand}` }] }],
@@ -515,7 +527,12 @@ async function fetchWalmartCareers(c: CompanyConfig, brand: string): Promise<Nor
   const toolMessages = data.data?.jobSearchAssistant?.tool_messages;
   if (!toolMessages || toolMessages.length === 0) {
     throw new Error(
-      `careers.walmart.com GraphQL response missing tool_messages for brand "${brand}" — queryId may have rotated or response shape changed`,
+      `careers.walmart.com GraphQL response is missing "tool_messages" for brand "${brand}". ` +
+        `The persisted queryId ("${WALMART_CAREERS_QUERY_ID}") has likely been rotated. ` +
+        `To re-discover the current queryId: open careers.walmart.com in Chrome, open DevTools → ` +
+        `Network tab, search for "associate product manager", filter requests by "graphql", ` +
+        `find the POST to /api/graphql, and copy the "queryId" field from the request payload. ` +
+        `Update WALMART_CAREERS_QUERY_ID in fetchers.ts — both fetchWalmartCareers and probeWalmartQueryId reference it.`,
     );
   }
   const allJobs = toolMessages[0]?.artifact?.jobs ?? [];
@@ -558,6 +575,66 @@ export async function fetchWalmart(c: CompanyConfig): Promise<NormalizedJob[]> {
 
 export async function fetchVizio(c: CompanyConfig): Promise<NormalizedJob[]> {
   return fetchWalmartCareers(c, "Vizio");
+}
+
+/**
+ * Health-check probe: verifies the careers.walmart.com GraphQL queryId is
+ * still valid by sending a known-brand ("Walmart") query and asserting that
+ * at least one job is returned. Throws a descriptive error if the queryId
+ * appears to have rotated, so callers can surface this before all three
+ * Walmart-family feeds go dark.
+ */
+export async function probeWalmartQueryId(): Promise<void> {
+  const threadId = `probe-${Date.now()}-${crypto.randomUUID()}`;
+  const data = (await fetchJson("https://careers.walmart.com/api/graphql", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      queryId: WALMART_CAREERS_QUERY_ID,
+      variables: {
+        chatRequest: {
+          messages: [{ role: "user", content: [{ type: "text", text: "jobs at Walmart" }] }],
+          thread_id: threadId,
+          channel: "job_search",
+          context: {
+            job_search_context: {
+              locale: "en_US",
+              sort: "relevance",
+              active_tab: "jobs",
+              management_levels: [],
+              content_page: 0,
+              future_roles_page: 0,
+              job_page: 0,
+            },
+          },
+        },
+      },
+    }),
+  })) as {
+    data?: {
+      jobSearchAssistant?: {
+        tool_messages?: Array<{ artifact?: { jobs?: unknown[] } }>;
+      };
+    };
+  };
+  const toolMessages = data.data?.jobSearchAssistant?.tool_messages;
+  if (!toolMessages || toolMessages.length === 0) {
+    throw new Error(
+      `[probe] careers.walmart.com queryId health check failed: response missing "tool_messages". ` +
+        `The persisted queryId ("${WALMART_CAREERS_QUERY_ID}") has likely been rotated. ` +
+        `To re-discover: open careers.walmart.com in Chrome → DevTools → Network tab, ` +
+        `search for any job, find the POST to /api/graphql, and copy the "queryId" from the request payload. ` +
+        `Update WALMART_CAREERS_QUERY_ID in fetchers.ts — both fetchWalmartCareers and probeWalmartQueryId reference it.`,
+    );
+  }
+  const jobs = toolMessages[0]?.artifact?.jobs ?? [];
+  if ((jobs as unknown[]).length === 0) {
+    throw new Error(
+      `[probe] careers.walmart.com queryId health check returned 0 jobs for a broad "jobs at Walmart" query. ` +
+        `The queryId ("${WALMART_CAREERS_QUERY_ID}") may have rotated or the API response shape may have changed. ` +
+        `Re-verify via browser DevTools at careers.walmart.com.`,
+    );
+  }
 }
 
 export const FEED_UNAVAILABLE = Symbol("FEED_UNAVAILABLE");

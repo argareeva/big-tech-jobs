@@ -7,6 +7,8 @@ import {
   isApmTitle,
   isInternshipTitle,
   isApmTitleOrCustomSearch,
+  probeWalmartQueryId,
+  WALMART_CAREERS_QUERY_ID,
 } from "./fetchers.js";
 import type { CompanyConfig } from "./companies.js";
 
@@ -391,6 +393,58 @@ describe("fetchSamsClub — brand filtering and APM title logic", () => {
     stubFetch({ data: { jobSearchAssistant: {} } });
 
     await expect(fetchSamsClub(samsClubConfig)).rejects.toThrow(/tool_messages/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// probeWalmartQueryId — queryId health check
+// ---------------------------------------------------------------------------
+
+/** A minimal valid probe response: tool_messages present and has at least one job */
+function makeProbeResponse(jobs: unknown[] = [{ job_id: "WMT-999", jobPostingTitle: "Retail Associate", brand: "Walmart" }]) {
+  return {
+    data: {
+      jobSearchAssistant: {
+        tool_messages: [{ artifact: { jobs } }],
+      },
+    },
+  };
+}
+
+describe("probeWalmartQueryId — queryId health check", () => {
+  it("resolves without error when the API returns a valid response with at least one job", async () => {
+    stubFetch(makeProbeResponse());
+    await expect(probeWalmartQueryId()).resolves.toBeUndefined();
+  });
+
+  it("sends the current WALMART_CAREERS_QUERY_ID in the probe request", async () => {
+    const mockFetch = stubFetch(makeProbeResponse());
+    await probeWalmartQueryId();
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as { queryId: string };
+    expect(body.queryId).toBe(WALMART_CAREERS_QUERY_ID);
+  });
+
+  it("throws with a rotation hint when tool_messages is missing", async () => {
+    stubFetch({ data: { jobSearchAssistant: {} } });
+    await expect(probeWalmartQueryId()).rejects.toThrow(
+      /tool_messages.*rotated|rotated.*tool_messages/i,
+    );
+  });
+
+  it("throws with a rotation hint when tool_messages is an empty array", async () => {
+    stubFetch({ data: { jobSearchAssistant: { tool_messages: [] } } });
+    await expect(probeWalmartQueryId()).rejects.toThrow(/tool_messages/i);
+  });
+
+  it("throws when the API returns 0 jobs (broad probe query should always yield results)", async () => {
+    stubFetch(makeProbeResponse([]));
+    await expect(probeWalmartQueryId()).rejects.toThrow(/0 jobs|rotated|changed/i);
+  });
+
+  it("throws when the HTTP response is non-2xx", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    await expect(probeWalmartQueryId()).rejects.toThrow("HTTP 503");
   });
 });
 
