@@ -74,6 +74,12 @@ export const COMPANIES: CompanyConfig[] = [
   // brand IN ["Sam's Club"] facet server-side; real Sam's Club Product Management
   // postings come back (e.g. "Senior Product Manager - Membership Engagement").
   { name: "Sam's Club", slug: "samsclub", ats: "custom", programName: "APM Program", programStatus: "active" },
+  // Vizio was acquired by Walmart and shares the same unified careers.walmart.com site
+  // (POST /api/graphql, queryId b0467c1f-f578-4261-9280-0ea4614f251c). Sending
+  // "... at Vizio" applies a brand IN ["Vizio"] facet server-side — confirmed live via
+  // curl (10 results returned, brand="Vizio"). No open APM postings currently (all Senior
+  // PM+), but the PM org exists and the feed is functional; 0 results is a seasonal gap.
+  { name: "Vizio", slug: "vizio", ats: "custom", programName: "APM Program", programStatus: "active" },
   // T-Mobile — Workday tenant confirmed live: POST returns 200 with ~2000 postings.
   { name: "T-Mobile", slug: "tmobile", ats: "workday", programName: "APM Program", programStatus: "active",
     workday: { host: "tmobile.wd1.myworkdayjobs.com", company: "tmobile", tenant: "external" } },

@@ -535,6 +535,10 @@ export async function fetchWalmart(c: CompanyConfig): Promise<NormalizedJob[]> {
   return fetchWalmartCareers(c, "Walmart");
 }
 
+export async function fetchVizio(c: CompanyConfig): Promise<NormalizedJob[]> {
+  return fetchWalmartCareers(c, "Vizio");
+}
+
 export const FEED_UNAVAILABLE = Symbol("FEED_UNAVAILABLE");
 
 export async function fetchForCompany(
@@ -562,6 +566,7 @@ export async function fetchForCompany(
       if (c.slug === "microsoft") return fetchMicrosoft(c);
       if (c.slug === "samsclub") return fetchSamsClub(c);
       if (c.slug === "walmart") return fetchWalmart(c);
+      if (c.slug === "vizio") return fetchVizio(c);
       if (c.slug === "disney") return fetchDisney(c);
       throw new Error(`No fetcher for ${c.slug}`);
   }
