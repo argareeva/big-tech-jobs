@@ -1,1 +1,2 @@
 - [APM tracker ATS endpoints](apm-ats-endpoints.md) — verified per-company careers JSON endpoints + quirks (Workday 422 = bad tenant; Uber needs x-csrf-token: x; Google is HTML-parsed).
+- [Scheduled Deployments setup](scheduled-deployments.md) — cannot be created via artifact.toml/createArtifact in a pnpm-monorepo project; it's a separate deployment the user configures in the Publishing UI.

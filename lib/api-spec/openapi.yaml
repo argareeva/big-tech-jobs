@@ -186,15 +186,10 @@ components:
           type: string
     DigestResult:
       type: object
-      required: [ok, skipped]
+      required: [ok]
       properties:
         ok:
           type: boolean
-        skipped:
-          type: boolean
-          description: true when no open roles were found and no email was sent
-        message:
-          type: ["string", "null"]
         totalJobs:
           type: number
         companiesWithJobs:

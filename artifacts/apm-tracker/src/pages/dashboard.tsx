@@ -34,17 +34,14 @@ export default function Dashboard() {
   const digestMutation = useSendDigest({
     mutation: {
       onSuccess: (result) => {
-        if (result.skipped) {
-          toast({
-            title: 'No open roles right now',
-            description: 'Digest not sent — no open roles found across all feeds.',
-          });
-        } else {
-          toast({
-            title: 'Digest sent!',
-            description: `${result.totalJobs} role${result.totalJobs !== 1 ? 's' : ''} across ${result.companiesWithJobs} companies sent to your inbox.`,
-          });
-        }
+        const totalJobs = result.totalJobs ?? 0;
+        toast({
+          title: 'Digest sent!',
+          description:
+            totalJobs > 0
+              ? `${totalJobs} role${totalJobs !== 1 ? 's' : ''} across ${result.companiesWithJobs ?? 0} companies sent to your inbox.`
+              : 'No open roles today — sent a "nothing open" email so you know the tracker is alive.',
+        });
       },
       onError: () => {
         toast({

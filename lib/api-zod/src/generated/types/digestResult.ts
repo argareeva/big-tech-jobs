@@ -8,10 +8,6 @@
 
 export interface DigestResult {
   ok: boolean;
-  /** true when no open roles were found and no email was sent */
-  skipped: boolean;
-  /** @nullable */
-  message?: string | null;
   totalJobs?: number;
   companiesWithJobs?: number;
   /**

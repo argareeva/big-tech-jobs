@@ -10,7 +10,6 @@ export interface DigestResult {
   totalJobs: number;
   companiesWithJobs: number;
   emailId: string | null;
-  skipped: boolean;
 }
 
 export async function sendDigest(log?: {
@@ -42,10 +41,6 @@ export async function sendDigest(log?: {
 
   const totalJobs = [...byCompany.values()].reduce((n, v) => n + v.jobs.length, 0);
 
-  if (totalJobs === 0) {
-    return { totalJobs: 0, companiesWithJobs: 0, emailId: null, skipped: true };
-  }
-
   // ── Build HTML ────────────────────────────────────────────────────────────
   const todayStr = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -63,31 +58,38 @@ export async function sendDigest(log?: {
     a.name.localeCompare(b.name),
   );
 
-  const companySections = sortedCompanies
-    .map(([, { name, jobs }]) => {
-      const rows = jobs
-        .map(
-          (j) => `
-          <li style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #f0f0f0;">
-            <a href="${esc(j.applyUrl)}" style="color:#f97316;font-weight:600;text-decoration:none;font-size:15px;">${esc(j.title)}</a>
-            <div style="color:#6b7280;font-size:13px;margin-top:3px;">📍 ${esc(j.location || "Location not specified")}</div>
-          </li>`,
-        )
-        .join("");
+  const companySections =
+    sortedCompanies.length === 0
+      ? `
+        <div style="text-align:center;padding:24px 0;color:#6b7280;">
+          <div style="font-size:15px;font-weight:600;color:#0f172a;margin-bottom:6px;">No open APM/RPM roles today</div>
+          <div style="font-size:13px;">Checked every tracked company's careers page — nothing currently open. You'll hear from us again tomorrow.</div>
+        </div>`
+      : sortedCompanies
+          .map(([, { name, jobs }]) => {
+            const rows = jobs
+              .map(
+                (j) => `
+                <li style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #f0f0f0;">
+                  <a href="${esc(j.applyUrl)}" style="color:#f97316;font-weight:600;text-decoration:none;font-size:15px;">${esc(j.title)}</a>
+                  <div style="color:#6b7280;font-size:13px;margin-top:3px;">📍 ${esc(j.location || "Location not specified")}</div>
+                </li>`,
+              )
+              .join("");
 
-      return `
-        <div style="margin-bottom:32px;">
-          <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#0f172a;
-                     border-left:4px solid #f97316;padding-left:12px;">
-            ${esc(name)}
-            <span style="font-size:13px;font-weight:400;color:#6b7280;margin-left:8px;">
-              ${jobs.length} open role${jobs.length !== 1 ? "s" : ""}
-            </span>
-          </h2>
-          <ul style="list-style:none;margin:0;padding:0;">${rows}</ul>
-        </div>`;
-    })
-    .join("");
+            return `
+              <div style="margin-bottom:32px;">
+                <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#0f172a;
+                           border-left:4px solid #f97316;padding-left:12px;">
+                  ${esc(name)}
+                  <span style="font-size:13px;font-weight:400;color:#6b7280;margin-left:8px;">
+                    ${jobs.length} open role${jobs.length !== 1 ? "s" : ""}
+                  </span>
+                </h2>
+                <ul style="list-style:none;margin:0;padding:0;">${rows}</ul>
+              </div>`;
+          })
+          .join("");
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -121,11 +123,15 @@ export async function sendDigest(log?: {
   // ── Send ────────────────────────────────────────────────────────────────
   const resend = new Resend(RESEND_API_KEY);
   const dateShort = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const subject =
+    totalJobs === 0
+      ? `APM Radar: no open roles today (${dateShort})`
+      : `APM Radar: ${totalJobs} open role${totalJobs !== 1 ? "s" : ""} today (${dateShort})`;
 
   const { data, error } = await resend.emails.send({
     from: "APM Radar <onboarding@resend.dev>",
     to: [NOTIFY_EMAIL],
-    subject: `APM Radar: ${totalJobs} open role${totalJobs !== 1 ? "s" : ""} today (${dateShort})`,
+    subject,
     html,
   });
 
@@ -135,6 +141,5 @@ export async function sendDigest(log?: {
     totalJobs,
     companiesWithJobs: byCompany.size,
     emailId: data?.id ?? null,
-    skipped: false,
   };
 }

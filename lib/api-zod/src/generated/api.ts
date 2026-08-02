@@ -68,8 +68,6 @@ export const GetJobStatsResponse = zod.object({
  */
 export const SendDigestResponse = zod.object({
   "ok": zod.boolean(),
-  "skipped": zod.boolean().describe('true when no open roles were found and no email was sent'),
-  "message": zod.string().nullish(),
   "totalJobs": zod.number().optional(),
   "companiesWithJobs": zod.number().optional(),
   "emailId": zod.string().nullish().describe('Resend email ID on success'),

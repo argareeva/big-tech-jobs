@@ -45,17 +45,12 @@ router.get("/companies", (_req, res) => {
 router.post("/jobs/digest", async (req, res) => {
   try {
     const result = await sendDigest(req.log);
-    if (result.skipped) {
-      res.json({ ok: true, skipped: true, message: "No open roles found — email not sent." });
-    } else {
-      res.json({
-        ok: true,
-        skipped: false,
-        totalJobs: result.totalJobs,
-        companiesWithJobs: result.companiesWithJobs,
-        emailId: result.emailId,
-      });
-    }
+    res.json({
+      ok: true,
+      totalJobs: result.totalJobs,
+      companiesWithJobs: result.companiesWithJobs,
+      emailId: result.emailId,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     req.log.error({ err }, "digest failed");
