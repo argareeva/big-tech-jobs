@@ -3,6 +3,18 @@ name: APM tracker ATS endpoints
 description: Verified per-company careers JSON endpoints and ATS research findings for the APM Radar tracker.
 ---
 
+## Microsoft PCSX search API — actually server-accessible, don't trust "blocked" claims without a fresh curl
+apply.careers.microsoft.com/api/pcsx/search (Eightfold AI PCSX) is reachable via
+plain server-side `curl` with no special headers/cookies — confirmed with a raw
+GET request returning real JSON. A separate investigation pass concluded this
+endpoint "returns 404 HTML to server-side requests" and reverted a working
+fetcher on that basis; that claim was false when re-tested. **Before believing
+an ATS endpoint is server-blocked, re-verify with a fresh direct curl —
+don't inherit a prior "blocked" conclusion without re-checking it.** The
+search itself is relevance-ranked, not exact-phrase, so client-side title
+filtering (like the ORC pattern above) is still required; query
+`"Program Manager University Grad"` reliably returns a small, checkable set.
+
 ## Microsoft PM Program — confirmed discontinued (not renamed)
 Verified via browser network capture against careers.microsoft.com/v2/global/en/programs/students.html
 (the official "Early in Profession" programs page): Microsoft lists rotation

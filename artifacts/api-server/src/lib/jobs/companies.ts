@@ -71,13 +71,13 @@ export const COMPANIES: CompanyConfig[] = [
   // not present in the SSR payload (__NEXT_DATA__ has no job data) or discoverable in JS bundles.
   { name: "IBM", slug: "ibm", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
   { name: "Yahoo", slug: "yahoo", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "ouryahoo.wd5.myworkdayjobs.com", company: "ouryahoo", tenant: "careers" } },
-  // Microsoft has no cohort APM program. New-grad PMs apply to "Program Manager University Grad"
-  // postings published each Aug-Oct (and a smaller wave Jan-Mar) on apply.careers.microsoft.com
-  // (Eightfold AI PCSX). No server-accessible JSON API exists: gcsservices.careers.microsoft.com
-  // is fully decommissioned (SSL cert mismatch), and the new Eightfold portal is a pure SPA —
-  // all /api/* paths return 404 HTML to server-side requests. feedUnavailable keeps the entry
-  // visible on the dashboard while flagging that live fetch is not possible server-side.
-  { name: "Microsoft", slug: "microsoft", ats: "custom", programName: "Program Manager University Grad", programStatus: "paused", feedUnavailable: true },
+  // Microsoft has no cohort APM program. New-grad PMs apply to individual "Program
+  // Manager University Grad" postings published seasonally (Aug-Oct main wave, smaller
+  // Jan-Mar wave) on apply.careers.microsoft.com (Eightfold AI PCSX). Verified live via
+  // fetchMicrosoft(): the search API IS server-accessible via plain HTTP (confirmed via
+  // curl, no browser session needed) — 0 postings open right now is a real seasonal gap,
+  // not a blocked feed.
+  { name: "Microsoft", slug: "microsoft", ats: "custom", programName: "Program Manager University Grad", programStatus: "active" },
   // Custom
   { name: "Google", slug: "google", ats: "custom", programName: "APM Program", programStatus: "active" },
   { name: "Uber", slug: "uber", ats: "custom", programName: "APM Program", programStatus: "active" },

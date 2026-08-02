@@ -347,6 +347,48 @@ export async function fetchIntuit(c: CompanyConfig): Promise<NormalizedJob[]> {
   return jobs;
 }
 
+/**
+ * Microsoft has no single cohort "APM Program" — new-grad PMs apply to
+ * individual "Program Manager University Grad" postings on
+ * apply.careers.microsoft.com (Eightfold AI PCSX), published seasonally
+ * (Aug-Oct main wave, smaller Jan-Mar wave). Verified server-accessible via
+ * plain curl (no browser/cookies needed) — this endpoint is NOT blocked.
+ * The search is relevance-ranked, not exact-phrase, so we still filter titles
+ * client-side.
+ */
+export async function fetchMicrosoft(c: CompanyConfig): Promise<NormalizedJob[]> {
+  const jobs: NormalizedJob[] = [];
+  const seen = new Set<string>();
+  for (const start of [0, 10]) {
+    const data = (await fetchJson(
+      `https://apply.careers.microsoft.com/api/pcsx/search?domain=microsoft.com&query=${encodeURIComponent(
+        "Program Manager University Grad",
+      )}&location=&start=${start}`,
+    )) as { data?: { positions?: Array<{ id: number; name: string; locations?: string[]; displayJobId?: string }> } };
+    const positions = data.data?.positions ?? [];
+    if (positions.length === 0) break;
+    for (const p of positions) {
+      if (seen.has(String(p.id))) continue;
+      seen.add(String(p.id));
+      const title = p.name ?? "";
+      if (!/program manager|product manager/i.test(title)) continue;
+      if (!/university grad|new grad/i.test(title)) continue;
+      if (isInternshipTitle(title)) continue;
+      jobs.push({
+        id: `microsoft-${p.id}`,
+        title,
+        company: c.name,
+        companySlug: c.slug,
+        location: p.locations?.[0] ?? "Unspecified",
+        applyUrl: `https://apply.careers.microsoft.com/careers/job/${p.id}?domain=microsoft.com`,
+        source: "microsoft",
+        postedOn: null,
+      });
+    }
+  }
+  return jobs;
+}
+
 export const FEED_UNAVAILABLE = Symbol("FEED_UNAVAILABLE");
 
 export async function fetchForCompany(
@@ -369,6 +411,7 @@ export async function fetchForCompany(
       if (c.slug === "uber") return fetchUber(c);
       if (c.slug === "atlassian") return fetchAtlassian(c);
       if (c.slug === "intuit") return fetchIntuit(c);
+      if (c.slug === "microsoft") return fetchMicrosoft(c);
       throw new Error(`No fetcher for ${c.slug}`);
   }
 }
