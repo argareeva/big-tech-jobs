@@ -3,6 +3,28 @@ name: APM tracker ATS endpoints
 description: Verified per-company careers JSON endpoints and ATS research findings for the APM Radar tracker.
 ---
 
+## Microsoft PM Program — confirmed discontinued (not renamed)
+Verified via browser network capture against careers.microsoft.com/v2/global/en/programs/students.html
+(the official "Early in Profession" programs page): Microsoft lists rotation
+programs by name — HR Rotation, Finance Rotation, Cloud Supply Chain Rotation —
+and no PM/APM rotation program exists under any name (checked common
+successor-brand guesses: "Explore Microsoft", "MACH", "Discovery Program" — all
+are either unrelated internship programs or don't exist). The old Microsoft PM
+Program (historically "MACH") is genuinely gone, not restructured/renamed.
+Re-check this page directly if asked again rather than re-guessing brand names.
+
+## Oracle Recruiting Cloud (ORC) — pattern for career sites that "have no API"
+Several large-company careers.* domains (e.g. careers.americanexpress.com,
+careers.jpmorgan.com) are just CMS/proxy shells with no visible API — the real
+ATS backend lives on a separate `*.fa.oraclecloud.com` host with a `siteNumber`
+(e.g. `CX_1`, `CX_1001`), only discoverable via a live browser network capture
+(a static curl/HTML read won't reveal it). Query pattern once found:
+`https://{host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList&finder=findReqs;siteNumber={site},keyword="...",limit=100`.
+**Important:** ORC's keyword search is fuzzy — it matches individual words
+across the whole job corpus, not phrases, and returns thousands of loosely
+related results. Always fetch a larger batch and apply an exact-match regex
+against `Title` client-side rather than trusting the search ranking.
+
 ## Verified Live Endpoints
 
 | Company | ATS | Config |

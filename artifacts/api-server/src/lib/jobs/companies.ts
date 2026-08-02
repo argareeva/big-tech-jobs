@@ -71,8 +71,13 @@ export const COMPANIES: CompanyConfig[] = [
   // not present in the SSR payload (__NEXT_DATA__ has no job data) or discoverable in JS bundles.
   { name: "IBM", slug: "ibm", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
   { name: "Yahoo", slug: "yahoo", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "ouryahoo.wd5.myworkdayjobs.com", company: "ouryahoo", tenant: "careers" } },
-  // gcsservices.careers.microsoft.com is network-unreachable from server-side; program is also paused
-  { name: "Microsoft", slug: "microsoft", ats: "custom", programName: "Microsoft PM Program", programStatus: "paused", feedUnavailable: true },
+  // Verified via browser network capture (Aug 2026): careers.microsoft.com/v2/global/en/programs/students.html
+  // lists Early in Profession rotation programs by name (HR Rotation, Finance
+  // Rotation, Cloud Supply Chain Rotation) — no PM/APM rotation program exists
+  // under any name. The old Microsoft PM Program (MACH) is genuinely discontinued,
+  // not renamed/restructured. Keeping this entry visible so it's easy to catch if
+  // Microsoft ever reintroduces one.
+  { name: "Microsoft", slug: "microsoft", ats: "custom", programName: "PM Program (discontinued)", programStatus: "paused", feedUnavailable: true },
   // Custom
   { name: "Google", slug: "google", ats: "custom", programName: "APM Program", programStatus: "active" },
   { name: "Uber", slug: "uber", ats: "custom", programName: "APM Program", programStatus: "active" },
