@@ -325,7 +325,14 @@ export async function fetchOracle(c: CompanyConfig): Promise<NormalizedJob[]> {
       requisitionList?: Array<{ Id: string; Title: string; PrimaryLocation?: string; PostedDate?: string }>;
     }>;
   };
-  const list = data.items?.[0]?.requisitionList ?? [];
+  if (!Array.isArray(data.items)) {
+    throw new Error(
+      `fetchOracle: response envelope changed for siteNumber "${o.siteNumber}" — ` +
+        `"items" is ${data.items === undefined ? "missing" : `not an array (got ${typeof data.items})`}. ` +
+        `The Oracle Recruiting Cloud hcmRestApi schema may have been updated.`,
+    );
+  }
+  const list = data.items[0]?.requisitionList ?? [];
   return list
     .filter((j) => j.Title && o.titleMatch.test(j.Title) && !isInternshipTitle(j.Title))
     .map((j) => ({

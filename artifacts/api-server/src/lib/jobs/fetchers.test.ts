@@ -10,6 +10,7 @@ import {
   fetchLever,
   fetchGreenhouse,
   fetchWorkday,
+  fetchOracle,
   isApmTitle,
   isInternshipTitle,
   isApmTitleOrCustomSearch,
@@ -1729,5 +1730,221 @@ describe("fetchWorkday — APM title filtering and field mapping", () => {
     ]));
     const jobs = await fetchWorkday(workdayCustomSearchConfig);
     expect(jobs).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchOracle — JSON API parser regression tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a minimal Oracle Recruiting Cloud hcmRestApi response fixture.
+ * Shape: { items: [{ requisitionList: [...] }] }
+ */
+function makeOracleResponse(
+  requisitions: Array<{
+    Id: string;
+    Title: string;
+    PrimaryLocation?: string;
+    PostedDate?: string;
+  }>,
+) {
+  return { items: [{ requisitionList: requisitions }] };
+}
+
+const ORACLE_REQUISITIONS = [
+  // APM — matches titleMatch, should be included
+  { Id: "REQ-001", Title: "Associate Product Manager", PrimaryLocation: "New York, NY", PostedDate: "2026-06-01" },
+  // Rotational PM variant — should be included
+  { Id: "REQ-002", Title: "Rotational Product Manager", PrimaryLocation: "Phoenix, AZ", PostedDate: "2026-06-02" },
+  // Non-APM title — excluded by titleMatch
+  { Id: "REQ-003", Title: "Senior Software Engineer", PrimaryLocation: "Atlanta, GA", PostedDate: "2026-06-03" },
+  // Internship — excluded by isInternshipTitle even if titleMatch would pass
+  { Id: "REQ-004", Title: "Associate Product Manager Intern", PrimaryLocation: "New York, NY", PostedDate: "2026-06-04" },
+  // APM with no location — falls back to "Unspecified"
+  { Id: "REQ-005", Title: "Associate Product Manager" },
+];
+
+const oracleConfig: CompanyConfig = {
+  name: "American Express",
+  slug: "amex",
+  ats: "oracle",
+  programName: "Amex APM",
+  programStatus: "active",
+  oracle: {
+    host: "amex.fa.oraclecloud.com",
+    siteNumber: "CX_1",
+    keyword: "associate product manager",
+    titleMatch: /associate product manager|rotational product manager/i,
+  },
+};
+
+describe("fetchOracle — outgoing request shape", () => {
+  it("calls the correct ORC hcmRestApi endpoint for the configured host", async () => {
+    const mockFetch = stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    await fetchOracle(oracleConfig);
+
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit | undefined];
+    expect(url).toContain("https://amex.fa.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions");
+  });
+
+  it("includes siteNumber in the finder query parameter", async () => {
+    const mockFetch = stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    await fetchOracle(oracleConfig);
+
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit | undefined];
+    expect(url).toContain("siteNumber=CX_1");
+  });
+
+  it("includes the URL-encoded keyword in the finder query parameter", async () => {
+    const mockFetch = stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    await fetchOracle(oracleConfig);
+
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit | undefined];
+    // keyword is quoted and encoded: "associate product manager" → %22associate%20product%20manager%22
+    expect(url).toContain("keyword=");
+    expect(decodeURIComponent(url)).toContain('keyword="associate product manager"');
+  });
+
+  it("uses GET (no method override — fetch default) to the ORC endpoint", async () => {
+    const mockFetch = stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    await fetchOracle(oracleConfig);
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit | undefined];
+    // fetchJson doesn't set method for GET requests
+    expect(init?.method).toBeUndefined();
+  });
+});
+
+describe("fetchOracle — response shape guard (silent-zero prevention)", () => {
+  it("throws (not silent zero) when the items key is absent from the response", async () => {
+    stubFetch({});
+    await expect(fetchOracle(oracleConfig)).rejects.toThrow(
+      /envelope changed|items.*missing/i,
+    );
+  });
+
+  it("throws (not silent zero) when items is null", async () => {
+    stubFetch({ items: null });
+    await expect(fetchOracle(oracleConfig)).rejects.toThrow(
+      /envelope changed|not an array/i,
+    );
+  });
+
+  it("throws (not silent zero) when items is a non-array object", async () => {
+    stubFetch({ items: { unexpected: "object" } });
+    await expect(fetchOracle(oracleConfig)).rejects.toThrow(
+      /envelope changed|not an array/i,
+    );
+  });
+
+  it("returns an empty array (not an error) when items is genuinely empty []", async () => {
+    // An empty items array means Oracle returned no results — valid, not a schema break
+    stubFetch({ items: [] });
+    await expect(fetchOracle(oracleConfig)).resolves.toEqual([]);
+  });
+
+  it("returns an empty array (not an error) when requisitionList is genuinely empty []", async () => {
+    stubFetch(makeOracleResponse([]));
+    await expect(fetchOracle(oracleConfig)).resolves.toEqual([]);
+  });
+
+  it("throws when the HTTP response is non-2xx (e.g. 403)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+    await expect(fetchOracle(oracleConfig)).rejects.toThrow("HTTP 403");
+  });
+
+  it("throws when the HTTP response is 500", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    await expect(fetchOracle(oracleConfig)).rejects.toThrow("HTTP 500");
+  });
+});
+
+describe("fetchOracle — APM title filtering and field mapping", () => {
+  it("parses at least one APM job from a fixture matching the current response shape", async () => {
+    stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    const jobs = await fetchOracle(oracleConfig);
+    expect(jobs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns exactly 3 APM jobs from the fixture (2× Associate + 1× Rotational, one without location)", async () => {
+    stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    const jobs = await fetchOracle(oracleConfig);
+    expect(jobs.length).toBe(3);
+  });
+
+  it("applies the titleMatch regex client-side to exclude non-APM titles", async () => {
+    stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    const jobs = await fetchOracle(oracleConfig);
+    expect(jobs.some((j) => /software engineer/i.test(j.title))).toBe(false);
+  });
+
+  it("excludes internship titles even when they would match the titleMatch regex", async () => {
+    stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    const jobs = await fetchOracle(oracleConfig);
+    expect(jobs.some((j) => /intern/i.test(j.title))).toBe(false);
+  });
+
+  it("maps id, title, location, applyUrl, source, and postedOn fields correctly", async () => {
+    stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    const jobs = await fetchOracle(oracleConfig);
+    const job = jobs.find((j) => j.id === "amex-REQ-001");
+
+    expect(job).toBeDefined();
+    expect(job!.title).toBe("Associate Product Manager");
+    expect(job!.location).toBe("New York, NY");
+    expect(job!.applyUrl).toBe(
+      "https://amex.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/REQ-001",
+    );
+    expect(job!.source).toBe("oracle");
+    expect(job!.companySlug).toBe("amex");
+    expect(job!.postedOn).toBe("2026-06-01");
+  });
+
+  it("falls back to 'Unspecified' when PrimaryLocation is absent", async () => {
+    stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    const jobs = await fetchOracle(oracleConfig);
+    const job = jobs.find((j) => j.id === "amex-REQ-005");
+
+    expect(job).toBeDefined();
+    expect(job!.location).toBe("Unspecified");
+  });
+
+  it("sets postedOn to null when PostedDate is absent", async () => {
+    stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    const jobs = await fetchOracle(oracleConfig);
+    const job = jobs.find((j) => j.id === "amex-REQ-005");
+
+    expect(job).toBeDefined();
+    expect(job!.postedOn).toBeNull();
+  });
+
+  it("respects a custom titleMatch regex — jobs not matching it are excluded", async () => {
+    // Config with a stricter titleMatch that only accepts "Associate Product Manager" exactly
+    const strictConfig: CompanyConfig = {
+      ...oracleConfig,
+      oracle: {
+        ...oracleConfig.oracle!,
+        titleMatch: /^associate product manager$/i,
+      },
+    };
+    stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    const jobs = await fetchOracle(strictConfig);
+
+    // REQ-001 and REQ-005 match; REQ-002 "Rotational PM" does not
+    expect(jobs.every((j) => /^associate product manager$/i.test(j.title))).toBe(true);
+    expect(jobs.some((j) => /rotational/i.test(j.title))).toBe(false);
+  });
+
+  it("throws when the oracle config is missing from the company config", async () => {
+    const noOracleConfig: CompanyConfig = {
+      name: "Unknown",
+      slug: "unknown",
+      ats: "oracle",
+      programName: "Unknown APM",
+      programStatus: "active",
+    };
+    stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
+    await expect(fetchOracle(noOracleConfig)).rejects.toThrow(/Missing oracle config/i);
   });
 });
