@@ -59,10 +59,12 @@ export const COMPANIES: CompanyConfig[] = [
   // jobs.intuit.com (Radancy/TalentBrew) server-renders full HTML search results —
   // confirmed live via browser network capture; scraped via fetchIntuit (custom).
   { name: "Intuit", slug: "intuit", ats: "custom", programName: "RPM Program", programStatus: "active" },
-  // careers.walmart.com is a Next.js CSR app (no JSON in initial HTML); the legacy
-  // walmart.wd5.myworkdayjobs.com/WalmartExternal Workday tenant now 404s/loops —
-  // Walmart appears to have migrated off that Workday site with no public replacement found.
-  { name: "Walmart", slug: "walmart", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
+  // careers.walmart.com shares the same AI job-search assistant GraphQL API used by
+  // Sam's Club (POST /api/graphql, persisted query jobSearchAssistant, queryId
+  // b0467c1f-f578-4261-9280-0ea4614f251c). Sending "... at Walmart" applies a
+  // brand IN ["Walmart"] facet server-side. Confirmed live and server-accessible
+  // via plain fetch (no cookies/session/candidateId needed).
+  { name: "Walmart", slug: "walmart", ats: "custom", programName: "APM Program", programStatus: "active" },
   // Sam's Club shares Walmart's unified careers.walmart.com site, which is a
   // Next.js/AEM app with an AI job-search assistant backing it: POST
   // https://careers.walmart.com/api/graphql (persisted query "jobSearchAssistant",
