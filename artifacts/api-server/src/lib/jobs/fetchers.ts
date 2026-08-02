@@ -14,9 +14,18 @@ export interface NormalizedJob {
 const APM_KEYWORDS =
   /\b(associate product manager|rotational product manager|graduate business leadership|apm|rpm)\b/i;
 
+// Internships/co-ops/summer programs are excluded everywhere — this tracker is
+// scoped to full-time openings only (see isApmTitle).
+const INTERNSHIP_KEYWORDS = /\b(intern|internship|co-?op|summer associate|summer analyst)\b/i;
+
+export function isInternshipTitle(title: string): boolean {
+  return INTERNSHIP_KEYWORDS.test(title);
+}
+
 // RPM also means "revolutions per minute"/"remote patient monitoring" in some titles;
 // require "product" context when matching bare apm/rpm acronyms.
 export function isApmTitle(title: string): boolean {
+  if (isInternshipTitle(title)) return false;
   const t = title.toLowerCase();
   if (t.includes("associate product manager") || t.includes("rotational product manager")) return true;
   if (t.includes("graduate business leadership")) return true; // PayPal GBLP
@@ -27,9 +36,11 @@ export function isApmTitle(title: string): boolean {
 /**
  * When a company config supplies a custom searchText, any result from that
  * targeted Workday search should be trusted without the generic isApmTitle
- * filter — the search already narrows to the right program.
+ * filter — the search already narrows to the right program. Internships are
+ * still excluded regardless of the search match.
  */
 export function isApmTitleOrCustomSearch(title: string, customSearch?: string): boolean {
+  if (isInternshipTitle(title)) return false;
   if (customSearch) return true; // trust the Workday search narrowing
   return isApmTitle(title);
 }
@@ -285,7 +296,7 @@ export async function fetchOracle(c: CompanyConfig): Promise<NormalizedJob[]> {
   };
   const list = data.items?.[0]?.requisitionList ?? [];
   return list
-    .filter((j) => j.Title && o.titleMatch.test(j.Title))
+    .filter((j) => j.Title && o.titleMatch.test(j.Title) && !isInternshipTitle(j.Title))
     .map((j) => ({
       id: `${c.slug}-${j.Id}`,
       title: j.Title,
