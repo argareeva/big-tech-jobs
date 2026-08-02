@@ -8,6 +8,7 @@ import {
   fetchUber,
   fetchAshby,
   fetchLever,
+  fetchGreenhouse,
   isApmTitle,
   isInternshipTitle,
   isApmTitleOrCustomSearch,
@@ -1256,5 +1257,194 @@ describe("fetchLever — JSON API parser (regression / silent-zero prevention)",
   it("throws when the HTTP response is 500", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
     await expect(fetchLever(leverConfig)).rejects.toThrow("HTTP 500");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchGreenhouse — JSON API parser regression tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a minimal Greenhouse boards-api job list response fixture.
+ * Shape: { jobs: [...] }
+ */
+function makeGreenhouseResponse(
+  jobs: Array<{
+    id: number;
+    title: string;
+    absolute_url: string;
+    location?: { name?: string };
+    updated_at?: string;
+  }>,
+) {
+  return { jobs };
+}
+
+const GREENHOUSE_JOBS = [
+  // APM — should be included
+  {
+    id: 1001,
+    title: "Associate Product Manager",
+    absolute_url: "https://boards.greenhouse.io/acme/jobs/1001",
+    location: { name: "San Francisco, CA" },
+    updated_at: "2026-06-01T00:00:00.000Z",
+  },
+  // Rotational PM variant — should be included
+  {
+    id: 1002,
+    title: "Rotational Product Manager",
+    absolute_url: "https://boards.greenhouse.io/acme/jobs/1002",
+    location: { name: "New York, NY" },
+    updated_at: "2026-06-02T00:00:00.000Z",
+  },
+  // Non-APM title — excluded by isApmTitle
+  {
+    id: 1003,
+    title: "Senior Software Engineer",
+    absolute_url: "https://boards.greenhouse.io/acme/jobs/1003",
+    location: { name: "Seattle, WA" },
+    updated_at: "2026-06-03T00:00:00.000Z",
+  },
+  // Internship — excluded even though it mentions APM
+  {
+    id: 1004,
+    title: "Associate Product Manager Intern",
+    absolute_url: "https://boards.greenhouse.io/acme/jobs/1004",
+    location: { name: "Austin, TX" },
+    updated_at: "2026-06-04T00:00:00.000Z",
+  },
+  // APM with missing location — falls back to "Unspecified"
+  {
+    id: 1005,
+    title: "Associate Product Manager",
+    absolute_url: "https://boards.greenhouse.io/acme/jobs/1005",
+  },
+];
+
+const greenhouseConfig: CompanyConfig = {
+  name: "Acme Corp",
+  slug: "acme",
+  ats: "greenhouse",
+  boardSlug: "acme",
+  programName: "Acme APM",
+  programStatus: "active",
+};
+
+describe("fetchGreenhouse — outgoing request shape", () => {
+  it("GETs the correct Greenhouse boards-api URL for the board slug", async () => {
+    const mockFetch = stubFetch(makeGreenhouseResponse(GREENHOUSE_JOBS));
+    await fetchGreenhouse(greenhouseConfig);
+
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true",
+    );
+  });
+});
+
+describe("fetchGreenhouse — JSON API parser (regression / silent-zero prevention)", () => {
+  it("parses at least one APM job from a fixture matching the current response shape", async () => {
+    stubFetch(makeGreenhouseResponse(GREENHOUSE_JOBS));
+    const jobs = await fetchGreenhouse(greenhouseConfig);
+    expect(jobs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns exactly 3 APM jobs from the fixture (2× Associate + 1× Rotational)", async () => {
+    stubFetch(makeGreenhouseResponse(GREENHOUSE_JOBS));
+    const jobs = await fetchGreenhouse(greenhouseConfig);
+    expect(jobs.length).toBe(3);
+  });
+
+  it("excludes non-APM titles (Senior Software Engineer)", async () => {
+    stubFetch(makeGreenhouseResponse(GREENHOUSE_JOBS));
+    const jobs = await fetchGreenhouse(greenhouseConfig);
+    expect(jobs.some((j) => /software engineer/i.test(j.title))).toBe(false);
+  });
+
+  it("excludes internship titles even when they mention APM", async () => {
+    stubFetch(makeGreenhouseResponse(GREENHOUSE_JOBS));
+    const jobs = await fetchGreenhouse(greenhouseConfig);
+    expect(jobs.some((j) => /intern/i.test(j.title))).toBe(false);
+  });
+
+  it("maps id, title, location, applyUrl, source, and postedOn fields correctly", async () => {
+    stubFetch(makeGreenhouseResponse(GREENHOUSE_JOBS));
+    const jobs = await fetchGreenhouse(greenhouseConfig);
+    const job = jobs.find((j) => j.id === "acme-1001");
+
+    expect(job).toBeDefined();
+    expect(job!.title).toBe("Associate Product Manager");
+    expect(job!.location).toBe("San Francisco, CA");
+    expect(job!.applyUrl).toBe("https://boards.greenhouse.io/acme/jobs/1001");
+    expect(job!.source).toBe("greenhouse");
+    expect(job!.companySlug).toBe("acme");
+    expect(job!.postedOn).toBe("2026-06-01");
+  });
+
+  it("falls back to 'Unspecified' when location is absent", async () => {
+    stubFetch(makeGreenhouseResponse(GREENHOUSE_JOBS));
+    const jobs = await fetchGreenhouse(greenhouseConfig);
+    const job = jobs.find((j) => j.id === "acme-1005");
+
+    expect(job).toBeDefined();
+    expect(job!.location).toBe("Unspecified");
+  });
+
+  it("sets postedOn to null when updated_at is absent", async () => {
+    stubFetch(makeGreenhouseResponse(GREENHOUSE_JOBS));
+    const jobs = await fetchGreenhouse(greenhouseConfig);
+    const job = jobs.find((j) => j.id === "acme-1005");
+
+    expect(job).toBeDefined();
+    expect(job!.postedOn).toBeNull();
+  });
+
+  it("slices updated_at ISO string to YYYY-MM-DD for postedOn", async () => {
+    stubFetch(makeGreenhouseResponse([{
+      id: 2001,
+      title: "Associate Product Manager",
+      absolute_url: "https://boards.greenhouse.io/acme/jobs/2001",
+      location: { name: "Remote" },
+      updated_at: "2026-07-15T12:34:56.000Z",
+    }]));
+    const jobs = await fetchGreenhouse(greenhouseConfig);
+    expect(jobs[0].postedOn).toBe("2026-07-15");
+  });
+
+  it("returns an empty array (not an error) when jobs array is genuinely empty", async () => {
+    stubFetch(makeGreenhouseResponse([]));
+    const jobs = await fetchGreenhouse(greenhouseConfig);
+    expect(jobs).toEqual([]);
+  });
+
+  it("throws (not silent zero) when the jobs key is absent from the response", async () => {
+    stubFetch({});
+    await expect(fetchGreenhouse(greenhouseConfig)).rejects.toThrow(
+      /envelope changed|jobs.*missing/i,
+    );
+  });
+
+  it("throws (not silent zero) when jobs is a non-array value (e.g. object)", async () => {
+    stubFetch({ jobs: { unexpected: "object" } });
+    await expect(fetchGreenhouse(greenhouseConfig)).rejects.toThrow(
+      /envelope changed|not an array/i,
+    );
+  });
+
+  it("throws (not silent zero) when jobs is null", async () => {
+    stubFetch({ jobs: null });
+    await expect(fetchGreenhouse(greenhouseConfig)).rejects.toThrow(
+      /envelope changed|not an array/i,
+    );
+  });
+
+  it("throws when the HTTP response is non-2xx (e.g. 404)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    await expect(fetchGreenhouse(greenhouseConfig)).rejects.toThrow("HTTP 404");
+  });
+
+  it("throws when the HTTP response is 500", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    await expect(fetchGreenhouse(greenhouseConfig)).rejects.toThrow("HTTP 500");
   });
 });

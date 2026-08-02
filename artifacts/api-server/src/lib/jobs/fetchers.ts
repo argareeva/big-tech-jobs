@@ -65,7 +65,14 @@ export async function fetchGreenhouse(c: CompanyConfig): Promise<NormalizedJob[]
   const data = (await fetchJson(
     `https://boards-api.greenhouse.io/v1/boards/${c.boardSlug}/jobs?content=true`,
   )) as { jobs?: Array<{ id: number; title: string; absolute_url: string; location?: { name?: string }; updated_at?: string }> };
-  return (data.jobs ?? [])
+  if (!Array.isArray(data.jobs)) {
+    throw new Error(
+      `fetchGreenhouse: response envelope changed for board "${c.boardSlug}" — ` +
+        `"jobs" is ${data.jobs === undefined ? "missing" : `not an array (got ${typeof data.jobs})`}. ` +
+        `The Greenhouse boards-api schema may have been updated.`,
+    );
+  }
+  return data.jobs
     .filter((j) => isApmTitle(j.title))
     .map((j) => ({
       id: `${c.slug}-${j.id}`,
