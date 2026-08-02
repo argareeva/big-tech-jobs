@@ -264,6 +264,78 @@ export async function fetchUber(c: CompanyConfig): Promise<NormalizedJob[]> {
     }));
 }
 
+/**
+ * Oracle Recruiting Cloud (ORC). The public careers.* domain (e.g.
+ * careers.americanexpress.com) is usually just a CMS/proxy shell — the real
+ * API lives on a *.fa.oraclecloud.com host with a siteNumber, discoverable
+ * via a browser network capture. ORC's keyword search is fuzzy (matches
+ * individual words across the whole job corpus, not phrases), so we fetch a
+ * larger batch and apply an exact-match regex client-side.
+ */
+export async function fetchOracle(c: CompanyConfig): Promise<NormalizedJob[]> {
+  const o = c.oracle;
+  if (!o) throw new Error(`Missing oracle config for ${c.slug}`);
+  const finder = `findReqs;siteNumber=${o.siteNumber},keyword=${encodeURIComponent(`"${o.keyword}"`)},limit=100`;
+  const data = (await fetchJson(
+    `https://${o.host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList&finder=${finder}`,
+  )) as {
+    items?: Array<{
+      requisitionList?: Array<{ Id: string; Title: string; PrimaryLocation?: string; PostedDate?: string }>;
+    }>;
+  };
+  const list = data.items?.[0]?.requisitionList ?? [];
+  return list
+    .filter((j) => j.Title && o.titleMatch.test(j.Title))
+    .map((j) => ({
+      id: `${c.slug}-${j.Id}`,
+      title: j.Title,
+      company: c.name,
+      companySlug: c.slug,
+      location: j.PrimaryLocation ?? "Unspecified",
+      applyUrl: `https://${o.host}/hcmUI/CandidateExperience/en/sites/${o.siteNumber}/job/${j.Id}`,
+      source: "oracle",
+      postedOn: j.PostedDate ?? null,
+    }));
+}
+
+/**
+ * jobs.intuit.com (Radancy/TalentBrew) server-renders full search results as
+ * HTML — confirmed via browser network capture (no separate JSON API is
+ * called; the page itself IS the response). Search via ?k=<query>, parse
+ * <a class="sr-item" data-title="..." href="..."> job cards.
+ */
+export async function fetchIntuit(c: CompanyConfig): Promise<NormalizedJob[]> {
+  const res = await fetch(
+    "https://jobs.intuit.com/search-jobs?k=associate+product+manager+OR+rotational+product+manager",
+    {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" },
+    },
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status} from jobs.intuit.com`);
+  const html = await res.text();
+  const jobs: NormalizedJob[] = [];
+  const cardRe =
+    /<a href="([^"]+)"[^>]+data-job-id="(\d+)"[^>]+class="sr-item"[^>]*data-title="([^"]+)"[\s\S]*?<span class="job-location">([^<]*)<\/span>/g;
+  let m: RegExpExecArray | null;
+  while ((m = cardRe.exec(html)) !== null) {
+    const [, path, id, rawTitle, location] = m;
+    const title = rawTitle.replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+    if (!isApmTitle(title)) continue;
+    jobs.push({
+      id: `intuit-${id}`,
+      title,
+      company: c.name,
+      companySlug: c.slug,
+      location: location.trim() || "Unspecified",
+      applyUrl: `https://jobs.intuit.com${path}`,
+      source: "intuit",
+      postedOn: null,
+    });
+  }
+  return jobs;
+}
+
 export const FEED_UNAVAILABLE = Symbol("FEED_UNAVAILABLE");
 
 export async function fetchForCompany(
@@ -279,10 +351,13 @@ export async function fetchForCompany(
       return fetchWorkday(c);
     case "smartrecruiters":
       return fetchSmartRecruiters(c);
+    case "oracle":
+      return fetchOracle(c);
     case "custom":
       if (c.slug === "google") return fetchGoogle(c);
       if (c.slug === "uber") return fetchUber(c);
       if (c.slug === "atlassian") return fetchAtlassian(c);
+      if (c.slug === "intuit") return fetchIntuit(c);
       throw new Error(`No fetcher for ${c.slug}`);
   }
 }

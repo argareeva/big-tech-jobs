@@ -1,4 +1,4 @@
-export type Ats = "greenhouse" | "lever" | "workday" | "smartrecruiters" | "custom";
+export type Ats = "greenhouse" | "lever" | "workday" | "smartrecruiters" | "oracle" | "custom";
 
 export interface CompanyConfig {
   name: string;
@@ -22,6 +22,19 @@ export interface CompanyConfig {
     /** Override the default "associate product manager" search text */
     searchText?: string;
   };
+  /**
+   * Oracle Recruiting Cloud (ORC). Note: the public-facing careers.* domain is
+   * usually just a proxy/CMS shell — the real API lives on a *.fa.oraclecloud.com
+   * host with a siteNumber like "CX_1", found via a browser network capture.
+   */
+  oracle?: {
+    host: string;
+    siteNumber: string;
+    /** Fuzzy full-text keyword sent to ORC's search (matches individual words, not phrases) */
+    keyword: string;
+    /** Exact-match regex applied client-side to titles, since ORC's keyword search is fuzzy */
+    titleMatch: RegExp;
+  };
 }
 
 export const COMPANIES: CompanyConfig[] = [
@@ -39,17 +52,23 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Meta", slug: "meta", ats: "custom", programName: "RPM Program", programStatus: "active", feedUnavailable: true },
   { name: "Salesforce", slug: "salesforce", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "salesforce.wd12.myworkdayjobs.com", company: "salesforce", tenant: "External_Career_Site" } },
   { name: "Visa", slug: "visa", ats: "smartrecruiters", programName: "APM Program", programStatus: "active", boardSlug: "Visa" },
-  // jobs.intuit.com (Radancy/TalentBrew) returns hasJobs:true but empty results server-side
-  { name: "Intuit", slug: "intuit", ats: "custom", programName: "RPM Program", programStatus: "active", feedUnavailable: true },
-  // careers.walmart.com is a Next.js CSR app with no public JSON API
+  // jobs.intuit.com (Radancy/TalentBrew) server-renders full HTML search results —
+  // confirmed live via browser network capture; scraped via fetchIntuit (custom).
+  { name: "Intuit", slug: "intuit", ats: "custom", programName: "RPM Program", programStatus: "active" },
+  // careers.walmart.com is a Next.js CSR app (no JSON in initial HTML); the legacy
+  // walmart.wd5.myworkdayjobs.com/WalmartExternal Workday tenant now 404s/loops —
+  // Walmart appears to have migrated off that Workday site with no public replacement found.
   { name: "Walmart", slug: "walmart", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
   { name: "Capital One", slug: "capitalone", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "capitalone.wd12.myworkdayjobs.com", company: "capitalone", tenant: "Capital_One" } },
   { name: "Atlassian", slug: "atlassian", ats: "custom", programName: "APM Program", programStatus: "active" },
-  // Shopify uses a private Ashby board (401); no Workday tenant responds 
+  // shopify.com/careers is a custom client-rendered app (pre-hydration monitor
+  // scripts); no discoverable JSON API in page source or via network capture attempts.
   { name: "Shopify", slug: "shopify", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
-  // careers.zynga.com is unreachable; jobs.zynga.com has no job-search API
+  // zynga.com/careers redirects to a WordPress marketing page (wp-json oembed only,
+  // no job search); real application flow (if any) isn't exposed on this domain.
   { name: "Zynga", slug: "zynga", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
-  // careers.ibm.com returns HTML for all API paths (iCIMS, no public JSON endpoint)
+  // ibm.com/careers/search is Next.js but job results load via a client-side call
+  // not present in the SSR payload (__NEXT_DATA__ has no job data) or discoverable in JS bundles.
   { name: "IBM", slug: "ibm", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
   { name: "Yahoo", slug: "yahoo", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "ouryahoo.wd5.myworkdayjobs.com", company: "ouryahoo", tenant: "careers" } },
   // gcsservices.careers.microsoft.com is network-unreachable from server-side; program is also paused
@@ -65,10 +84,16 @@ export const COMPANIES: CompanyConfig[] = [
   // PayPal — Workday wd1 tenant=jobs; custom searchText to surface GBLP when open
   { name: "PayPal", slug: "paypal", ats: "workday", programName: "GBLP", programStatus: "active",
     workday: { host: "paypal.wd1.myworkdayjobs.com", company: "paypal", tenant: "jobs", searchText: "graduate business leadership" } },
-  // American Express — careers.americanexpress.com (Oracle ORC) and Avature both
-  // block server-side requests; Eightfold domain is network-unreachable from server.
-  { name: "American Express", slug: "amex", ats: "custom", programName: "TRP", programStatus: "active", feedUnavailable: true },
-  // JPMorgan Chase — careers.jpmorgan.com is Adobe Experience Manager (AEM) and
-  // returns HTML for every API path; no JSON endpoint is publicly exposed.
-  { name: "JPMorgan Chase", slug: "jpmorgan", ats: "custom", programName: "CB Innovation / Chase Associate", programStatus: "active", feedUnavailable: true },
+  // American Express — careers.americanexpress.com is a CMS shell; the real ATS is
+  // Oracle Recruiting Cloud on egug.fa.us2.oraclecloud.com (siteNumber CX_1),
+  // found via browser network capture. Confirmed live; 0 TRP postings open currently.
+  { name: "American Express", slug: "amex", ats: "oracle", programName: "TRP", programStatus: "active",
+    oracle: { host: "egug.fa.us2.oraclecloud.com", siteNumber: "CX_1", keyword: "talent rotation program", titleMatch: /talent rotation program|\btrp\b/i } },
+  // JPMorgan Chase — careers.jpmorgan.com is Adobe Experience Manager (AEM, HTML only),
+  // but the actual ATS is Oracle Recruiting Cloud on jpmc.fa.oraclecloud.com
+  // (siteNumber CX_1001), found via browser network capture. Confirmed live with
+  // real open reqs for the Chase Associate Program.
+  { name: "JPMorgan Chase", slug: "jpmorgan", ats: "oracle", programName: "CB Innovation / Chase Associate", programStatus: "active",
+    oracle: { host: "jpmc.fa.oraclecloud.com", siteNumber: "CX_1001", keyword: "chase associate program",
+      titleMatch: /chase associate program|innovation development program|commercial banking innovation/i } },
 ];
