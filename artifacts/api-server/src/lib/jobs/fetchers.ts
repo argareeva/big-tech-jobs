@@ -512,7 +512,13 @@ async function fetchWalmartCareers(c: CompanyConfig, brand: string): Promise<Nor
       };
     };
   };
-  const jobs = data.data?.jobSearchAssistant?.tool_messages?.[0]?.artifact?.jobs ?? [];
+  const toolMessages = data.data?.jobSearchAssistant?.tool_messages;
+  if (!toolMessages || toolMessages.length === 0) {
+    throw new Error(
+      `careers.walmart.com GraphQL response missing tool_messages for brand "${brand}" — queryId may have rotated or response shape changed`,
+    );
+  }
+  const jobs = toolMessages[0]?.artifact?.jobs ?? [];
   return jobs
     .filter((j) => j.brand === brand && j.jobPostingTitle && isApmTitle(j.jobPostingTitle))
     .map((j) => ({
