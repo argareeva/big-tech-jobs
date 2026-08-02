@@ -1,4 +1,4 @@
-export type Ats = "greenhouse" | "lever" | "workday" | "smartrecruiters" | "oracle" | "custom";
+export type Ats = "greenhouse" | "lever" | "workday" | "smartrecruiters" | "oracle" | "ashby" | "custom";
 
 export interface CompanyConfig {
   name: string;
@@ -14,6 +14,8 @@ export interface CompanyConfig {
   feedUnavailable?: true;
   /** Greenhouse/Lever board slug */
   boardSlug?: string;
+  /** Ashby job board name, e.g. "Perplexity" in https://api.ashbyhq.com/posting-api/job-board/Perplexity */
+  ashbyBoardName?: string;
   /** Workday: host like "meta.wd1.myworkdayjobs.com" and tenant site name */
   workday?: {
     host: string;
@@ -124,4 +126,6 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "IXL Learning", slug: "ixl-learning", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "ixllearning" },
   { name: "Roblox", slug: "roblox", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "roblox" },
   { name: "Duolingo", slug: "duolingo", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "duolingo" },
+  // Ashby — public posting API confirmed live, no auth needed
+  { name: "Perplexity", slug: "perplexity", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "Perplexity" },
 ];

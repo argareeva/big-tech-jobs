@@ -389,6 +389,36 @@ export async function fetchMicrosoft(c: CompanyConfig): Promise<NormalizedJob[]>
   return jobs;
 }
 
+/**
+ * Ashby's public posting-api job board — confirmed live, no auth required:
+ * GET https://api.ashbyhq.com/posting-api/job-board/{boardName}
+ */
+export async function fetchAshby(c: CompanyConfig): Promise<NormalizedJob[]> {
+  const data = (await fetchJson(
+    `https://api.ashbyhq.com/posting-api/job-board/${c.ashbyBoardName}`,
+  )) as {
+    jobs?: Array<{
+      id: string;
+      title: string;
+      location?: string;
+      applyUrl: string;
+      publishedAt?: string;
+    }>;
+  };
+  return (data.jobs ?? [])
+    .filter((j) => isApmTitle(j.title))
+    .map((j) => ({
+      id: `${c.slug}-${j.id}`,
+      title: j.title,
+      company: c.name,
+      companySlug: c.slug,
+      location: j.location ?? "Unspecified",
+      applyUrl: j.applyUrl,
+      source: "ashby",
+      postedOn: j.publishedAt ? j.publishedAt.slice(0, 10) : null,
+    }));
+}
+
 export const FEED_UNAVAILABLE = Symbol("FEED_UNAVAILABLE");
 
 export async function fetchForCompany(
@@ -406,6 +436,8 @@ export async function fetchForCompany(
       return fetchSmartRecruiters(c);
     case "oracle":
       return fetchOracle(c);
+    case "ashby":
+      return fetchAshby(c);
     case "custom":
       if (c.slug === "google") return fetchGoogle(c);
       if (c.slug === "uber") return fetchUber(c);
