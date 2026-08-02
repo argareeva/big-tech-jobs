@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchWalmart, fetchSamsClub } from "./fetchers.js";
+import { fetchWalmart, fetchSamsClub, fetchDisney, fetchIntuit } from "./fetchers.js";
 import type { CompanyConfig } from "./companies.js";
 
 // ---------------------------------------------------------------------------
@@ -285,5 +285,201 @@ describe("fetchSamsClub — brand filtering and APM title logic", () => {
     stubFetch({ data: { jobSearchAssistant: {} } });
 
     await expect(fetchSamsClub(samsClubConfig)).rejects.toThrow(/tool_messages/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchDisney — HTML parser regression tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal HTML fixture that matches the rowRe pattern used in fetchDisney:
+ *   /<a href="..." data-job-id="..."><h2>title</h2>...<span class="job-date-posted">...</span>...<span class="job-location">...</span>/
+ */
+function makeDisneyHtml(
+  cards: Array<{ path: string; id: string; title: string; date: string; location: string }>,
+): string {
+  return cards
+    .map(
+      (c) =>
+        `<a href="${c.path}" data-job-id="${c.id}" class="job-link">` +
+        `\n  <h2>${c.title}</h2>` +
+        `\n  <span class="job-date-posted">${c.date}</span>` +
+        `\n  <span class="job-location">${c.location}</span>` +
+        `\n</a>`,
+    )
+    .join("\n");
+}
+
+const DISNEY_CARDS = makeDisneyHtml([
+  // APM — should be included
+  { path: "/job/disney-123", id: "123", title: "Associate Product Manager", date: "Jun. 1 2026", location: "Burbank, CA" },
+  // Rotational PM variant — should be included
+  { path: "/job/disney-124", id: "124", title: "Rotational Product Manager", date: "Jun. 2 2026", location: "New York, NY" },
+  // Non-APM title — excluded by isApmTitle
+  { path: "/job/disney-125", id: "125", title: "Senior Software Engineer", date: "Jun. 3 2026", location: "Seattle, WA" },
+  // Internship — excluded even though it mentions APM
+  { path: "/job/disney-126", id: "126", title: "Associate Product Manager Intern", date: "Jun. 4 2026", location: "Orlando, FL" },
+]);
+
+const disneyConfig: CompanyConfig = {
+  name: "Disney",
+  slug: "disney",
+  ats: "custom",
+  programName: "Disney APM",
+  programStatus: "active",
+};
+
+/** Stub fetch to return an HTML string (text(), not json()). */
+function stubFetchHtml(html: string) {
+  const mockFn = vi.fn().mockResolvedValue({
+    ok: true,
+    text: () => Promise.resolve(html),
+  });
+  vi.stubGlobal("fetch", mockFn);
+  return mockFn;
+}
+
+describe("fetchDisney — HTML parser (regression / silent-zero prevention)", () => {
+  it("parses at least one APM job card from a fixture matching the current regex", async () => {
+    stubFetchHtml(DISNEY_CARDS);
+    const jobs = await fetchDisney(disneyConfig);
+    expect(jobs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns exactly 2 APM jobs from the fixture (Associate + Rotational PM)", async () => {
+    stubFetchHtml(DISNEY_CARDS);
+    const jobs = await fetchDisney(disneyConfig);
+    expect(jobs.length).toBe(2);
+  });
+
+  it("excludes non-APM titles (Senior Software Engineer)", async () => {
+    stubFetchHtml(DISNEY_CARDS);
+    const jobs = await fetchDisney(disneyConfig);
+    expect(jobs.some((j) => /software engineer/i.test(j.title))).toBe(false);
+  });
+
+  it("excludes internship titles even when they mention APM", async () => {
+    stubFetchHtml(DISNEY_CARDS);
+    const jobs = await fetchDisney(disneyConfig);
+    expect(jobs.some((j) => /intern/i.test(j.title))).toBe(false);
+  });
+
+  it("maps id, title, location, applyUrl, and source fields correctly", async () => {
+    stubFetchHtml(DISNEY_CARDS);
+    const jobs = await fetchDisney(disneyConfig);
+    const job = jobs.find((j) => j.id === "disney-123");
+
+    expect(job).toBeDefined();
+    expect(job!.title).toBe("Associate Product Manager");
+    expect(job!.location).toBe("Burbank, CA");
+    expect(job!.applyUrl).toBe("https://jobs.disneycareers.com/job/disney-123");
+    expect(job!.source).toBe("disney");
+    expect(job!.companySlug).toBe("disney");
+  });
+
+  it("returns an empty array (not an error) when no APM jobs are present", async () => {
+    stubFetchHtml(makeDisneyHtml([
+      { path: "/job/disney-200", id: "200", title: "Staff Data Scientist", date: "Jun. 1 2026", location: "Burbank, CA" },
+    ]));
+    const jobs = await fetchDisney(disneyConfig);
+    expect(jobs).toEqual([]);
+  });
+
+  it("throws when the HTTP response is non-2xx", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    await expect(fetchDisney(disneyConfig)).rejects.toThrow("HTTP 503");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchIntuit — HTML parser regression tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal HTML fixture that matches the cardRe pattern used in fetchIntuit:
+ *   /<a href="..." data-job-id="..." class="sr-item" data-title="...">...<span class="job-location">...</span>/
+ */
+function makeIntuitHtml(
+  cards: Array<{ path: string; id: string; title: string; location: string }>,
+): string {
+  return cards
+    .map(
+      (c) =>
+        `<a href="${c.path}" data-job-id="${c.id}" class="sr-item" data-title="${c.title}">` +
+        `\n  <span class="job-location">${c.location}</span>` +
+        `\n</a>`,
+    )
+    .join("\n");
+}
+
+const INTUIT_CARDS = makeIntuitHtml([
+  // APM — should be included
+  { path: "/jobs/12345", id: "12345", title: "Associate Product Manager", location: "Mountain View, CA" },
+  // Rotational PM variant — should be included
+  { path: "/jobs/12346", id: "12346", title: "Rotational Product Manager", location: "San Diego, CA" },
+  // Non-APM title — excluded
+  { path: "/jobs/12347", id: "12347", title: "Principal Engineer", location: "Plano, TX" },
+  // Internship — excluded even though it mentions APM
+  { path: "/jobs/12348", id: "12348", title: "Associate Product Manager Intern", location: "Mountain View, CA" },
+]);
+
+const intuitConfig: CompanyConfig = {
+  name: "Intuit",
+  slug: "intuit",
+  ats: "custom",
+  programName: "Intuit APM",
+  programStatus: "active",
+};
+
+describe("fetchIntuit — HTML parser (regression / silent-zero prevention)", () => {
+  it("parses at least one APM job card from a fixture matching the current regex", async () => {
+    stubFetchHtml(INTUIT_CARDS);
+    const jobs = await fetchIntuit(intuitConfig);
+    expect(jobs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns exactly 2 APM jobs from the fixture (Associate + Rotational PM)", async () => {
+    stubFetchHtml(INTUIT_CARDS);
+    const jobs = await fetchIntuit(intuitConfig);
+    expect(jobs.length).toBe(2);
+  });
+
+  it("excludes non-APM titles (Principal Engineer)", async () => {
+    stubFetchHtml(INTUIT_CARDS);
+    const jobs = await fetchIntuit(intuitConfig);
+    expect(jobs.some((j) => /engineer/i.test(j.title))).toBe(false);
+  });
+
+  it("excludes internship titles even when they mention APM", async () => {
+    stubFetchHtml(INTUIT_CARDS);
+    const jobs = await fetchIntuit(intuitConfig);
+    expect(jobs.some((j) => /intern/i.test(j.title))).toBe(false);
+  });
+
+  it("maps id, title, location, applyUrl, and source fields correctly", async () => {
+    stubFetchHtml(INTUIT_CARDS);
+    const jobs = await fetchIntuit(intuitConfig);
+    const job = jobs.find((j) => j.id === "intuit-12345");
+
+    expect(job).toBeDefined();
+    expect(job!.title).toBe("Associate Product Manager");
+    expect(job!.location).toBe("Mountain View, CA");
+    expect(job!.applyUrl).toBe("https://jobs.intuit.com/jobs/12345");
+    expect(job!.source).toBe("intuit");
+    expect(job!.companySlug).toBe("intuit");
+  });
+
+  it("returns an empty array (not an error) when no APM jobs are present", async () => {
+    stubFetchHtml(makeIntuitHtml([
+      { path: "/jobs/99999", id: "99999", title: "Staff Data Scientist", location: "Plano, TX" },
+    ]));
+    const jobs = await fetchIntuit(intuitConfig);
+    expect(jobs).toEqual([]);
+  });
+
+  it("throws when the HTTP response is non-2xx", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    await expect(fetchIntuit(intuitConfig)).rejects.toThrow("HTTP 404");
   });
 });
