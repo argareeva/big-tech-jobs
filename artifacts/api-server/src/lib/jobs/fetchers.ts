@@ -518,9 +518,24 @@ async function fetchWalmartCareers(c: CompanyConfig, brand: string): Promise<Nor
       `careers.walmart.com GraphQL response missing tool_messages for brand "${brand}" — queryId may have rotated or response shape changed`,
     );
   }
-  const jobs = toolMessages[0]?.artifact?.jobs ?? [];
-  return jobs
-    .filter((j) => j.brand === brand && j.jobPostingTitle && isApmTitle(j.jobPostingTitle))
+  const allJobs = toolMessages[0]?.artifact?.jobs ?? [];
+
+  // Separate brand-facet check from APM-title filter.
+  // A zero raw-brand count means the facet string itself drifted (e.g. post-acquisition
+  // rename "Vizio" → "VIZIO") — that is the signal worth surfacing.
+  // Zero APM results is normal when there are no open APM postings (expected seasonal gap).
+  const brandJobs = allJobs.filter((j) => j.brand === brand);
+  if (brandJobs.length === 0) {
+    console.warn(
+      `[canary] careers.walmart.com returned 0 jobs with brand="${brand}". ` +
+        `The brand facet string may have changed post-acquisition. ` +
+        `Re-verify via a browser network capture at careers.walmart.com ` +
+        `(last confirmed brand="${brand}" for Vizio: 2026-08-02, 10 raw jobs).`,
+    );
+  }
+
+  return brandJobs
+    .filter((j) => j.jobPostingTitle && isApmTitle(j.jobPostingTitle))
     .map((j) => ({
       id: `${c.slug}-${j.job_id}`,
       title: j.jobPostingTitle,

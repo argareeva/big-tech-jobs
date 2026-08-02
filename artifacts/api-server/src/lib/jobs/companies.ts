@@ -76,9 +76,11 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Sam's Club", slug: "samsclub", ats: "custom", programName: "APM Program", programStatus: "active" },
   // Vizio was acquired by Walmart and shares the same unified careers.walmart.com site
   // (POST /api/graphql, queryId b0467c1f-f578-4261-9280-0ea4614f251c). Sending
-  // "... at Vizio" applies a brand IN ["Vizio"] facet server-side — confirmed live via
-  // curl (10 results returned, brand="Vizio"). No open APM postings currently (all Senior
-  // PM+), but the PM org exists and the feed is functional; 0 results is a seasonal gap.
+  // "... at Vizio" applies a brand IN ["Vizio"] facet server-side — re-verified live
+  // 2026-08-02 (10 total Vizio jobs returned, brand="Vizio"). Post-acquisition brand
+  // consolidation risk: if facet string drifts (e.g. "VIZIO" or "Walmart Technology"),
+  // fetchVizio logs a canary warning on 0 APM results. No open APM postings currently
+  // (all Senior PM+), but the PM org exists and the feed is functional; 0 is seasonal.
   { name: "Vizio", slug: "vizio", ats: "custom", programName: "APM Program", programStatus: "active" },
   // T-Mobile — Workday tenant confirmed live: POST returns 200 with ~2000 postings.
   { name: "T-Mobile", slug: "tmobile", ats: "workday", programName: "APM Program", programStatus: "active",
