@@ -465,11 +465,11 @@ export async function fetchDisney(c: CompanyConfig): Promise<NormalizedJob[]> {
  * backed by an AI job-search assistant GraphQL API rather than a plain
  * keyword search — confirmed server-accessible via plain fetch (no
  * cookies/session/candidateId needed). Sending a natural-language query that
- * names the brand makes it apply a `brand IN [...]` facet server-side, so we
- * ask for "... at Sam's Club" and get back real Sam's Club postings.
+ * names the brand makes it apply a `brand IN [...]` facet server-side.
+ * Pass the exact brand string (e.g. "Walmart", "Sam's Club") to scope results.
  */
-export async function fetchSamsClub(c: CompanyConfig): Promise<NormalizedJob[]> {
-  const threadId = `S-${Date.now()}-${crypto.randomUUID()}`;
+async function fetchWalmartCareers(c: CompanyConfig, brand: string): Promise<NormalizedJob[]> {
+  const threadId = `${brand[0]}-${Date.now()}-${crypto.randomUUID()}`;
   const data = (await fetchJson("https://careers.walmart.com/api/graphql", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -477,7 +477,7 @@ export async function fetchSamsClub(c: CompanyConfig): Promise<NormalizedJob[]> 
       queryId: "b0467c1f-f578-4261-9280-0ea4614f251c",
       variables: {
         chatRequest: {
-          messages: [{ role: "user", content: [{ type: "text", text: "associate product manager at Sam's Club" }] }],
+          messages: [{ role: "user", content: [{ type: "text", text: `associate product manager at ${brand}` }] }],
           thread_id: threadId,
           channel: "job_search",
           context: {
@@ -514,7 +514,7 @@ export async function fetchSamsClub(c: CompanyConfig): Promise<NormalizedJob[]> 
   };
   const jobs = data.data?.jobSearchAssistant?.tool_messages?.[0]?.artifact?.jobs ?? [];
   return jobs
-    .filter((j) => j.brand === "Sam's Club" && j.jobPostingTitle && isApmTitle(j.jobPostingTitle))
+    .filter((j) => j.brand === brand && j.jobPostingTitle && isApmTitle(j.jobPostingTitle))
     .map((j) => ({
       id: `${c.slug}-${j.job_id}`,
       title: j.jobPostingTitle,
@@ -527,70 +527,12 @@ export async function fetchSamsClub(c: CompanyConfig): Promise<NormalizedJob[]> 
     }));
 }
 
-/**
- * careers.walmart.com (shared Walmart + Sam's Club + Vizio careers site) is
- * backed by an AI job-search assistant GraphQL API — confirmed server-accessible
- * via plain fetch (no cookies/session/candidateId needed). Asking for
- * "... at Walmart" makes the API apply a `brand IN ["Walmart"]` facet
- * server-side, returning only Walmart-branded postings.
- */
+export async function fetchSamsClub(c: CompanyConfig): Promise<NormalizedJob[]> {
+  return fetchWalmartCareers(c, "Sam's Club");
+}
+
 export async function fetchWalmart(c: CompanyConfig): Promise<NormalizedJob[]> {
-  const threadId = `W-${Date.now()}-${crypto.randomUUID()}`;
-  const data = (await fetchJson("https://careers.walmart.com/api/graphql", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      queryId: "b0467c1f-f578-4261-9280-0ea4614f251c",
-      variables: {
-        chatRequest: {
-          messages: [{ role: "user", content: [{ type: "text", text: "associate product manager at Walmart" }] }],
-          thread_id: threadId,
-          channel: "job_search",
-          context: {
-            job_search_context: {
-              locale: "en_US",
-              sort: "relevance",
-              active_tab: "jobs",
-              management_levels: [],
-              content_page: 0,
-              future_roles_page: 0,
-              job_page: 0,
-            },
-          },
-        },
-      },
-    }),
-  })) as {
-    data?: {
-      jobSearchAssistant?: {
-        tool_messages?: Array<{
-          artifact?: {
-            jobs?: Array<{
-              job_id: string;
-              jobPostingTitle: string;
-              brand?: string;
-              city?: string;
-              state?: string;
-              jobPostingStartDate?: number;
-            }>;
-          };
-        }>;
-      };
-    };
-  };
-  const jobs = data.data?.jobSearchAssistant?.tool_messages?.[0]?.artifact?.jobs ?? [];
-  return jobs
-    .filter((j) => j.brand === "Walmart" && j.jobPostingTitle && isApmTitle(j.jobPostingTitle))
-    .map((j) => ({
-      id: `${c.slug}-${j.job_id}`,
-      title: j.jobPostingTitle,
-      company: c.name,
-      companySlug: c.slug,
-      location: [j.city, j.state].filter(Boolean).join(", ") || "Unspecified",
-      applyUrl: `https://careers.walmart.com/us/en/job/${j.job_id}`,
-      source: "walmart-careers",
-      postedOn: j.jobPostingStartDate ? new Date(j.jobPostingStartDate).toISOString().slice(0, 10) : null,
-    }));
+  return fetchWalmartCareers(c, "Walmart");
 }
 
 export const FEED_UNAVAILABLE = Symbol("FEED_UNAVAILABLE");
