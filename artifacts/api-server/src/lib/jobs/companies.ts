@@ -71,13 +71,12 @@ export const COMPANIES: CompanyConfig[] = [
   // not present in the SSR payload (__NEXT_DATA__ has no job data) or discoverable in JS bundles.
   { name: "IBM", slug: "ibm", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
   { name: "Yahoo", slug: "yahoo", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "ouryahoo.wd5.myworkdayjobs.com", company: "ouryahoo", tenant: "careers" } },
-  // Verified via browser network capture (Aug 2026): careers.microsoft.com/v2/global/en/programs/students.html
-  // lists Early in Profession rotation programs by name (HR Rotation, Finance
-  // Rotation, Cloud Supply Chain Rotation) — no PM/APM rotation program exists
-  // under any name. The old Microsoft PM Program (MACH) is genuinely discontinued,
-  // not renamed/restructured. Keeping this entry visible so it's easy to catch if
-  // Microsoft ever reintroduces one.
-  { name: "Microsoft", slug: "microsoft", ats: "custom", programName: "PM Program (discontinued)", programStatus: "paused", feedUnavailable: true },
+  // Verified Aug 2026: Microsoft does NOT have a dedicated cohort-based APM/rotational program.
+  // "Aspire" is an automatic onboarding journey enrolled for all qualifying new hires — not a
+  // named application-based program. New-grad PMs apply directly to "Program Manager University
+  // Grad" postings. gcsservices.careers.microsoft.com (the old ATS API) remains network-unreachable
+  // server-side. No equivalent cohort program was found to wire up.
+  { name: "Microsoft", slug: "microsoft", ats: "custom", programName: "Program Manager University Grad", programStatus: "paused", feedUnavailable: true },
   // Custom
   { name: "Google", slug: "google", ats: "custom", programName: "APM Program", programStatus: "active" },
   { name: "Uber", slug: "uber", ats: "custom", programName: "APM Program", programStatus: "active" },
