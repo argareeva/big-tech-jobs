@@ -128,4 +128,10 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Duolingo", slug: "duolingo", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "duolingo" },
   // Ashby — public posting API confirmed live, no auth needed
   { name: "Perplexity", slug: "perplexity", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "Perplexity" },
+  // Batch 4 additions — Ashby boards confirmed live via curl (200 + real postings);
+  // 0 current APM/RPM matches for all four is a real seasonal gap, not a broken feed.
+  { name: "Ramp", slug: "ramp", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "Ramp" },
+  { name: "Notion", slug: "notion", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "Notion" },
+  { name: "Linear", slug: "linear", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "Linear" },
+  { name: "Vanta", slug: "vanta", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "Vanta" },
 ];
