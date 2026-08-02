@@ -47,6 +47,8 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Block", slug: "block", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "block" },
   // Lever
   { name: "Spotify", slug: "spotify", ats: "lever", programName: "APM Program", programStatus: "active", boardSlug: "spotify" },
+  { name: "Plaid", slug: "plaid", ats: "lever", programName: "APM Program", programStatus: "active", boardSlug: "plaid" },
+  { name: "Warner Music Group", slug: "wmg", ats: "lever", programName: "APM Program", programStatus: "active", boardSlug: "wmg" },
   // Workday
   // metacareers.com uses a private Relay/GraphQL endpoint that blocks server-side requests
   { name: "Meta", slug: "meta", ats: "custom", programName: "RPM Program", programStatus: "active", feedUnavailable: true },
