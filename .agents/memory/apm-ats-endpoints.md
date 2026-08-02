@@ -25,6 +25,24 @@ are either unrelated internship programs or don't exist). The old Microsoft PM
 Program (historically "MACH") is genuinely gone, not restructured/renamed.
 Re-check this page directly if asked again rather than re-guessing brand names.
 
+## careers.walmart.com — real search backend is an AI GraphQL assistant, not the SSR page data
+Earlier research concluded careers.walmart.com was CSR-only with all `/api/*` paths
+serving HTML — **that conclusion was stale/wrong.** A browser network capture (typing
+into the site's search box, not just loading a URL with query params) revealed the
+actual search backend: `POST https://careers.walmart.com/api/graphql` using a
+persisted-query `jobSearchAssistant` (queryId `b0467c1f-f578-4261-9280-0ea4614f251c`)
+that takes a natural-language chat message and returns a `jobs[]` array. It's
+server-accessible via plain curl with no cookies/session/candidateId required.
+Two non-obvious things: (1) loading a `?q=...` URL directly does NOT apply the
+filter — the query only works when sent as the chat message text; (2) naming a
+brand in the message text (e.g. `"... at Sam's Club"`) makes the assistant apply
+a `brand IN [...]` facet server-side — this is how Walmart's single shared site
+serves Walmart / Sam's Club / Vizio separately. **Lesson: for sites with an
+AI/chatbot-style search widget, capture the network traffic from an actual UI
+interaction (typing + submitting), not just a page load — the meaningful API call
+often only fires on user action, and URL-param navigation can silently return
+generic/unfiltered results that look like "the API ignores filters."**
+
 ## Oracle Recruiting Cloud (ORC) — pattern for career sites that "have no API"
 Several large-company careers.* domains (e.g. careers.americanexpress.com,
 careers.jpmorgan.com) are just CMS/proxy shells with no visible API — the real
@@ -60,7 +78,6 @@ against `Title` client-side rather than trusting the search ranking.
 |---|---|
 | Meta | metacareers.com Relay/GraphQL blocks server-side; doc_id found but endpoint returns Facebook error page |
 | Intuit | jobs.intuit.com (Radancy/TalentBrew) returns `{hasJobs:true, results:""}` — no server-side content |
-| Walmart | careers.walmart.com is CSR Next.js; all `/api/*` paths serve HTML |
 | Shopify | Private Ashby board (401); all Workday tenants 422 |
 | Zynga | careers.zynga.com unreachable (000); jobs.zynga.com has no job API |
 | IBM | careers.ibm.com returns HTML for all API paths (iCIMS, no public JSON) |

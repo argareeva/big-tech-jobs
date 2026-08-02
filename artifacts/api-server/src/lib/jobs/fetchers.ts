@@ -419,6 +419,73 @@ export async function fetchAshby(c: CompanyConfig): Promise<NormalizedJob[]> {
     }));
 }
 
+/**
+ * careers.walmart.com (shared Walmart + Sam's Club + Vizio careers site) is
+ * backed by an AI job-search assistant GraphQL API rather than a plain
+ * keyword search — confirmed server-accessible via plain fetch (no
+ * cookies/session/candidateId needed). Sending a natural-language query that
+ * names the brand makes it apply a `brand IN [...]` facet server-side, so we
+ * ask for "... at Sam's Club" and get back real Sam's Club postings.
+ */
+export async function fetchSamsClub(c: CompanyConfig): Promise<NormalizedJob[]> {
+  const threadId = `S-${Date.now()}-${crypto.randomUUID()}`;
+  const data = (await fetchJson("https://careers.walmart.com/api/graphql", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      queryId: "b0467c1f-f578-4261-9280-0ea4614f251c",
+      variables: {
+        chatRequest: {
+          messages: [{ role: "user", content: [{ type: "text", text: "associate product manager at Sam's Club" }] }],
+          thread_id: threadId,
+          channel: "job_search",
+          context: {
+            job_search_context: {
+              locale: "en_US",
+              sort: "relevance",
+              active_tab: "jobs",
+              management_levels: [],
+              content_page: 0,
+              future_roles_page: 0,
+              job_page: 0,
+            },
+          },
+        },
+      },
+    }),
+  })) as {
+    data?: {
+      jobSearchAssistant?: {
+        tool_messages?: Array<{
+          artifact?: {
+            jobs?: Array<{
+              job_id: string;
+              jobPostingTitle: string;
+              brand?: string;
+              city?: string;
+              state?: string;
+              jobPostingStartDate?: number;
+            }>;
+          };
+        }>;
+      };
+    };
+  };
+  const jobs = data.data?.jobSearchAssistant?.tool_messages?.[0]?.artifact?.jobs ?? [];
+  return jobs
+    .filter((j) => j.brand === "Sam's Club" && j.jobPostingTitle && isApmTitle(j.jobPostingTitle))
+    .map((j) => ({
+      id: `${c.slug}-${j.job_id}`,
+      title: j.jobPostingTitle,
+      company: c.name,
+      companySlug: c.slug,
+      location: [j.city, j.state].filter(Boolean).join(", ") || "Unspecified",
+      applyUrl: `https://careers.walmart.com/us/en/job/${j.job_id}`,
+      source: "walmart-careers",
+      postedOn: j.jobPostingStartDate ? new Date(j.jobPostingStartDate).toISOString().slice(0, 10) : null,
+    }));
+}
+
 export const FEED_UNAVAILABLE = Symbol("FEED_UNAVAILABLE");
 
 export async function fetchForCompany(
@@ -444,6 +511,7 @@ export async function fetchForCompany(
       if (c.slug === "atlassian") return fetchAtlassian(c);
       if (c.slug === "intuit") return fetchIntuit(c);
       if (c.slug === "microsoft") return fetchMicrosoft(c);
+      if (c.slug === "samsclub") return fetchSamsClub(c);
       throw new Error(`No fetcher for ${c.slug}`);
   }
 }
