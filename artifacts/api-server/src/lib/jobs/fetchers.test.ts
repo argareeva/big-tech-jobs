@@ -5,6 +5,7 @@ import {
   fetchDisney,
   fetchIntuit,
   fetchGoogle,
+  fetchUber,
   isApmTitle,
   isInternshipTitle,
   isApmTitleOrCustomSearch,
@@ -749,5 +750,138 @@ describe("fetchGoogle — HTML parser (regression / silent-zero prevention)", ()
   it("throws when the HTTP response is non-2xx", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
     await expect(fetchGoogle(googleConfig)).rejects.toThrow("HTTP 403");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchUber — JSON API parser regression tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a minimal Uber loadSearchJobsResults API response fixture.
+ * Shape: { data: { results: [...] } }
+ */
+function makeUberResponse(
+  results: Array<{
+    id: number;
+    title: string;
+    creationDate?: string;
+    location?: { city?: string | null; countryName?: string | null };
+  }>,
+) {
+  return { data: { results } };
+}
+
+const UBER_RESULTS = [
+  // APM — should be included
+  { id: 111, title: "Associate Product Manager", creationDate: "2026-05-01T00:00:00Z", location: { city: "San Francisco", countryName: "United States" } },
+  // Rotational PM variant — should be included
+  { id: 112, title: "Rotational Product Manager", creationDate: "2026-05-02T00:00:00Z", location: { city: "New York", countryName: "United States" } },
+  // Non-APM title — excluded
+  { id: 113, title: "Senior Software Engineer", creationDate: "2026-05-03T00:00:00Z", location: { city: "Seattle", countryName: "United States" } },
+  // Internship — excluded even when title mentions APM
+  { id: 114, title: "Associate Product Manager Intern", creationDate: "2026-05-04T00:00:00Z", location: { city: "Chicago", countryName: "United States" } },
+];
+
+const uberConfig: CompanyConfig = {
+  name: "Uber",
+  slug: "uber",
+  ats: "custom",
+  programName: "Uber APM",
+  programStatus: "active",
+};
+
+describe("fetchUber — JSON API parser (regression / silent-zero prevention)", () => {
+  it("sends the x-csrf-token: x header on every request", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(makeUberResponse(UBER_RESULTS)),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+    await fetchUber(uberConfig);
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)["x-csrf-token"]).toBe("x");
+  });
+
+  it("POSTs to the correct Uber careers endpoint", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(makeUberResponse(UBER_RESULTS)),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+    await fetchUber(uberConfig);
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("uber.com/api/loadSearchJobsResults");
+  });
+
+  it("parses at least one APM job from a fixture matching the current response shape", async () => {
+    stubFetch(makeUberResponse(UBER_RESULTS));
+    const jobs = await fetchUber(uberConfig);
+    expect(jobs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns exactly 2 APM jobs from the fixture (Associate + Rotational PM)", async () => {
+    stubFetch(makeUberResponse(UBER_RESULTS));
+    const jobs = await fetchUber(uberConfig);
+    expect(jobs.length).toBe(2);
+  });
+
+  it("excludes non-APM titles (Senior Software Engineer)", async () => {
+    stubFetch(makeUberResponse(UBER_RESULTS));
+    const jobs = await fetchUber(uberConfig);
+    expect(jobs.some((j) => /software engineer/i.test(j.title))).toBe(false);
+  });
+
+  it("excludes internship titles even when they mention APM", async () => {
+    stubFetch(makeUberResponse(UBER_RESULTS));
+    const jobs = await fetchUber(uberConfig);
+    expect(jobs.some((j) => /intern/i.test(j.title))).toBe(false);
+  });
+
+  it("maps id, title, location, applyUrl, postedOn, and source fields correctly", async () => {
+    stubFetch(makeUberResponse(UBER_RESULTS));
+    const jobs = await fetchUber(uberConfig);
+    const job = jobs.find((j) => j.id === "uber-111");
+
+    expect(job).toBeDefined();
+    expect(job!.title).toBe("Associate Product Manager");
+    expect(job!.location).toBe("San Francisco, United States");
+    expect(job!.applyUrl).toBe("https://www.uber.com/global/en/careers/list/111/");
+    expect(job!.source).toBe("uber");
+    expect(job!.companySlug).toBe("uber");
+    expect(job!.postedOn).toBe("2026-05-01");
+  });
+
+  it("throws (not silent zero) when data.data is missing from the response", async () => {
+    stubFetch({ someOtherShape: true });
+    await expect(fetchUber(uberConfig)).rejects.toThrow(/data\.data.*missing|envelope changed/i);
+  });
+
+  it("throws (not silent zero) when data.data.results is missing", async () => {
+    stubFetch({ data: { noResults: true } });
+    await expect(fetchUber(uberConfig)).rejects.toThrow(/results.*not an array|envelope changed/i);
+  });
+
+  it("throws (not silent zero) when data.data.results is null", async () => {
+    stubFetch({ data: { results: null } });
+    await expect(fetchUber(uberConfig)).rejects.toThrow(/results.*not an array|envelope changed/i);
+  });
+
+  it("throws (not silent zero) when data.data.results is a non-array value", async () => {
+    stubFetch({ data: { results: { unexpected: "object" } } });
+    await expect(fetchUber(uberConfig)).rejects.toThrow(/results.*not an array|envelope changed/i);
+  });
+
+  it("returns an empty array (not an error) when results contains no APM jobs", async () => {
+    stubFetch(makeUberResponse([
+      { id: 999, title: "Staff Data Scientist", location: { city: "Austin", countryName: "United States" } },
+    ]));
+    const jobs = await fetchUber(uberConfig);
+    expect(jobs).toEqual([]);
+  });
+
+  it("throws when the HTTP response is non-2xx", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    await expect(fetchUber(uberConfig)).rejects.toThrow("HTTP 503");
   });
 });

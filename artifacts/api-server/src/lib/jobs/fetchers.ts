@@ -261,7 +261,17 @@ export async function fetchUber(c: CompanyConfig): Promise<NormalizedJob[]> {
       }>;
     };
   };
-  return (data.data?.results ?? [])
+  if (!data.data) {
+    throw new Error(
+      "fetchUber: response envelope changed — data.data is missing. The Uber careers API may have been updated.",
+    );
+  }
+  if (!Array.isArray(data.data.results)) {
+    throw new Error(
+      "fetchUber: response envelope changed — data.data.results is not an array. The Uber careers API may have been updated.",
+    );
+  }
+  return data.data.results
     .filter((j) => isApmTitle(j.title))
     .map((j) => ({
       id: `uber-${j.id}`,
