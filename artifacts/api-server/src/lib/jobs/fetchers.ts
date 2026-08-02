@@ -83,7 +83,14 @@ export async function fetchLever(c: CompanyConfig): Promise<NormalizedJob[]> {
   const data = (await fetchJson(
     `https://api.lever.co/v0/postings/${c.boardSlug}?mode=json`,
   )) as Array<{ id: string; text: string; hostedUrl: string; createdAt?: number; categories?: { location?: string } }>;
-  return (Array.isArray(data) ? data : [])
+  if (!Array.isArray(data)) {
+    throw new Error(
+      `fetchLever: response is not an array for board "${c.boardSlug}" — ` +
+        `got ${data === null ? "null" : typeof data}. ` +
+        `The Lever API schema may have changed (e.g. results wrapped in an object).`,
+    );
+  }
+  return data
     .filter((j) => isApmTitle(j.text))
     .map((j) => ({
       id: `${c.slug}-${j.id}`,

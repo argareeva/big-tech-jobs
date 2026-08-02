@@ -7,6 +7,7 @@ import {
   fetchGoogle,
   fetchUber,
   fetchAshby,
+  fetchLever,
   isApmTitle,
   isInternshipTitle,
   isApmTitleOrCustomSearch,
@@ -1065,5 +1066,195 @@ describe("fetchAshby — JSON API parser (regression / silent-zero prevention)",
   it("throws when the HTTP response is 500", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
     await expect(fetchAshby(ashbyConfig)).rejects.toThrow("HTTP 500");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchLever — JSON API parser regression tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a minimal Lever v0/postings response fixture.
+ * Shape: flat array of posting objects — NOT a nested object.
+ */
+function makeLeverResponse(
+  postings: Array<{
+    id: string;
+    text: string;
+    hostedUrl: string;
+    createdAt?: number;
+    categories?: { location?: string };
+  }>,
+) {
+  return postings; // Lever returns a flat array at the top level
+}
+
+const LEVER_POSTINGS = makeLeverResponse([
+  // APM — should be included
+  {
+    id: "lever-apm-001",
+    text: "Associate Product Manager",
+    hostedUrl: "https://jobs.lever.co/acme/lever-apm-001",
+    createdAt: 1748736000000, // 2025-06-01 (epoch ms)
+    categories: { location: "San Francisco, CA" },
+  },
+  // Rotational PM variant — should be included
+  {
+    id: "lever-rpm-002",
+    text: "Rotational Product Manager",
+    hostedUrl: "https://jobs.lever.co/acme/lever-rpm-002",
+    createdAt: 1748822400000, // 2025-06-02
+    categories: { location: "New York, NY" },
+  },
+  // Non-APM title — excluded by isApmTitle
+  {
+    id: "lever-swe-003",
+    text: "Senior Software Engineer",
+    hostedUrl: "https://jobs.lever.co/acme/lever-swe-003",
+    createdAt: 1748908800000,
+    categories: { location: "Remote" },
+  },
+  // Internship — excluded even though it mentions APM
+  {
+    id: "lever-intern-004",
+    text: "Associate Product Manager Intern",
+    hostedUrl: "https://jobs.lever.co/acme/lever-intern-004",
+    createdAt: 1748995200000,
+    categories: { location: "Austin, TX" },
+  },
+  // APM with no categories/location — falls back to "Unspecified"
+  {
+    id: "lever-apm-005",
+    text: "Associate Product Manager",
+    hostedUrl: "https://jobs.lever.co/acme/lever-apm-005",
+  },
+]);
+
+const leverConfig: CompanyConfig = {
+  name: "Acme Corp",
+  slug: "acme",
+  ats: "lever",
+  boardSlug: "acme",
+  programName: "Acme APM",
+  programStatus: "active",
+};
+
+describe("fetchLever — outgoing request shape", () => {
+  it("GETs the correct Lever v0/postings URL with mode=json", async () => {
+    const mockFetch = stubFetch(LEVER_POSTINGS);
+    await fetchLever(leverConfig);
+
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.lever.co/v0/postings/acme?mode=json");
+  });
+});
+
+describe("fetchLever — JSON API parser (regression / silent-zero prevention)", () => {
+  it("parses at least one APM job from a fixture matching the current response shape", async () => {
+    stubFetch(LEVER_POSTINGS);
+    const jobs = await fetchLever(leverConfig);
+    expect(jobs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns exactly 3 APM jobs from the fixture (2× Associate + 1× Rotational)", async () => {
+    stubFetch(LEVER_POSTINGS);
+    const jobs = await fetchLever(leverConfig);
+    expect(jobs.length).toBe(3);
+  });
+
+  it("excludes non-APM titles (Senior Software Engineer)", async () => {
+    stubFetch(LEVER_POSTINGS);
+    const jobs = await fetchLever(leverConfig);
+    expect(jobs.some((j) => /software engineer/i.test(j.title))).toBe(false);
+  });
+
+  it("excludes internship titles even when they mention APM", async () => {
+    stubFetch(LEVER_POSTINGS);
+    const jobs = await fetchLever(leverConfig);
+    expect(jobs.some((j) => /intern/i.test(j.title))).toBe(false);
+  });
+
+  it("maps id, title, location, applyUrl, source, and postedOn fields correctly", async () => {
+    stubFetch(LEVER_POSTINGS);
+    const jobs = await fetchLever(leverConfig);
+    const job = jobs.find((j) => j.id === "acme-lever-apm-001");
+
+    expect(job).toBeDefined();
+    expect(job!.title).toBe("Associate Product Manager");
+    expect(job!.location).toBe("San Francisco, CA");
+    expect(job!.applyUrl).toBe("https://jobs.lever.co/acme/lever-apm-001");
+    expect(job!.source).toBe("lever");
+    expect(job!.companySlug).toBe("acme");
+    expect(job!.postedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("falls back to 'Unspecified' when categories.location is absent", async () => {
+    stubFetch(LEVER_POSTINGS);
+    const jobs = await fetchLever(leverConfig);
+    const job = jobs.find((j) => j.id === "acme-lever-apm-005");
+
+    expect(job).toBeDefined();
+    expect(job!.location).toBe("Unspecified");
+  });
+
+  it("sets postedOn to null when createdAt is absent", async () => {
+    stubFetch(LEVER_POSTINGS);
+    const jobs = await fetchLever(leverConfig);
+    const job = jobs.find((j) => j.id === "acme-lever-apm-005");
+
+    expect(job).toBeDefined();
+    expect(job!.postedOn).toBeNull();
+  });
+
+  it("converts createdAt epoch-ms to YYYY-MM-DD for postedOn", async () => {
+    stubFetch(makeLeverResponse([
+      {
+        id: "lever-ts-010",
+        text: "Associate Product Manager",
+        hostedUrl: "https://jobs.lever.co/acme/lever-ts-010",
+        createdAt: 1751328000000, // 2025-07-01T00:00:00Z
+        categories: { location: "Remote" },
+      },
+    ]));
+    const jobs = await fetchLever(leverConfig);
+    expect(jobs[0].postedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("returns an empty array (not an error) when the flat array contains no APM jobs", async () => {
+    stubFetch(makeLeverResponse([
+      {
+        id: "lever-sds-999",
+        text: "Staff Data Scientist",
+        hostedUrl: "https://jobs.lever.co/acme/lever-sds-999",
+        categories: { location: "Remote" },
+      },
+    ]));
+    const jobs = await fetchLever(leverConfig);
+    expect(jobs).toEqual([]);
+  });
+
+  it("throws (not silent zero) when the response is an object instead of a flat array", async () => {
+    stubFetch({ jobs: [{ id: "x", text: "Associate Product Manager", hostedUrl: "https://jobs.lever.co/acme/x" }] });
+    await expect(fetchLever(leverConfig)).rejects.toThrow(/not an array|schema may have changed/i);
+  });
+
+  it("throws (not silent zero) when the response is null", async () => {
+    stubFetch(null);
+    await expect(fetchLever(leverConfig)).rejects.toThrow(/not an array|schema may have changed/i);
+  });
+
+  it("throws (not silent zero) when the response is a plain string", async () => {
+    stubFetch("unexpected string");
+    await expect(fetchLever(leverConfig)).rejects.toThrow(/not an array|schema may have changed/i);
+  });
+
+  it("throws when the HTTP response is non-2xx (e.g. 404)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    await expect(fetchLever(leverConfig)).rejects.toThrow("HTTP 404");
+  });
+
+  it("throws when the HTTP response is 500", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    await expect(fetchLever(leverConfig)).rejects.toThrow("HTTP 500");
   });
 });
