@@ -137,4 +137,26 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Notion", slug: "notion", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "Notion" },
   { name: "Linear", slug: "linear", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "Linear" },
   { name: "Vanta", slug: "vanta", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "Vanta" },
+  // Batch 5 additions — investigated a hypothesis that Disney/BlackRock/New Balance/
+  // Adobe/Warner Bros. Discovery/PNC (all sharing a "/global/en/job/{code}/{id}"
+  // career URL) ran on a shared Oracle Fusion Cloud Recruiting backend. Disproven:
+  // PNC/Adobe/WBD/New Balance are Phenom People CMS skins over real Workday tenants
+  // (confirmed live below); Disney/BlackRock are TalentBrew (Radancy), not Oracle.
+  { name: "PNC", slug: "pnc", ats: "workday", programName: "APM Program", programStatus: "active",
+    workday: { host: "pnc.wd5.myworkdayjobs.com", company: "pnc", tenant: "External" } },
+  { name: "Adobe", slug: "adobe", ats: "workday", programName: "APM Program", programStatus: "active",
+    workday: { host: "adobe.wd5.myworkdayjobs.com", company: "adobe", tenant: "external_experienced" } },
+  { name: "Warner Bros. Discovery", slug: "wbd", ats: "workday", programName: "APM Program", programStatus: "active",
+    workday: { host: "warnerbros.wd5.myworkdayjobs.com", company: "warnerbros", tenant: "global" } },
+  { name: "New Balance", slug: "new-balance", ats: "workday", programName: "APM Program", programStatus: "active",
+    workday: { host: "newbalance.wd1.myworkdayjobs.com", company: "newbalance", tenant: "Careers" } },
+  // jobs.disneycareers.com (TalentBrew/Radancy, not Oracle) server-renders full HTML
+  // search results — confirmed live; scraped via fetchDisney (custom), modeled on
+  // the existing fetchIntuit TalentBrew scraper.
+  { name: "Disney", slug: "disney", ats: "custom", programName: "APM Program", programStatus: "active" },
+  // careers.blackrock.com is also TalentBrew, but its job list loads via a
+  // session-scoped AJAX module call (data-ajax-url="/module/postmodule") that
+  // returns a redirect on a stateless request — not reliably fetchable without a
+  // real browser session. Left unavailable pending future investigation.
+  { name: "BlackRock", slug: "blackrock", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
 ];

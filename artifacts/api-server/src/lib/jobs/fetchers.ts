@@ -420,6 +420,47 @@ export async function fetchAshby(c: CompanyConfig): Promise<NormalizedJob[]> {
 }
 
 /**
+ * jobs.disneycareers.com runs on TalentBrew (Radancy) — same ATS family as
+ * Intuit, not Oracle Fusion Cloud Recruiting despite Disney's careers URLs
+ * sharing a "/global/en/job/{code}/{id}"-style pattern with some Oracle
+ * shops. The search-results page server-renders a plain HTML table;
+ * confirmed live via direct fetch (no browser session needed).
+ */
+export async function fetchDisney(c: CompanyConfig): Promise<NormalizedJob[]> {
+  const res = await fetch(
+    "https://jobs.disneycareers.com/search-jobs/associate%20product%20manager%20OR%20rotational%20product%20manager",
+    {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" },
+    },
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status} from jobs.disneycareers.com`);
+  const html = await res.text();
+  const jobs: NormalizedJob[] = [];
+  const rowRe =
+    /<a href="([^"]+)" data-job-id="(\d+)"[^>]*>\s*<h2>([^<]+)<\/h2>[\s\S]*?<span class="job-date-posted">([^<]*)<\/span>[\s\S]*?<span class="job-location">([^<]*)<\/span>/g;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(html)) !== null) {
+    const [, path, id, rawTitle, postedRaw, rawLocation] = m;
+    const title = rawTitle.replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
+    if (!isApmTitle(title)) continue;
+    const location = rawLocation.replace(/\s+/g, " ").trim();
+    const posted = new Date(postedRaw.replace(".", ""));
+    jobs.push({
+      id: `disney-${id}`,
+      title,
+      company: c.name,
+      companySlug: c.slug,
+      location: location || "Unspecified",
+      applyUrl: `https://jobs.disneycareers.com${path}`,
+      source: "disney",
+      postedOn: Number.isNaN(posted.getTime()) ? null : posted.toISOString().slice(0, 10),
+    });
+  }
+  return jobs;
+}
+
+/**
  * careers.walmart.com (shared Walmart + Sam's Club + Vizio careers site) is
  * backed by an AI job-search assistant GraphQL API rather than a plain
  * keyword search — confirmed server-accessible via plain fetch (no
@@ -512,6 +553,7 @@ export async function fetchForCompany(
       if (c.slug === "intuit") return fetchIntuit(c);
       if (c.slug === "microsoft") return fetchMicrosoft(c);
       if (c.slug === "samsclub") return fetchSamsClub(c);
+      if (c.slug === "disney") return fetchDisney(c);
       throw new Error(`No fetcher for ${c.slug}`);
   }
 }
