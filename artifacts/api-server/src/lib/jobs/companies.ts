@@ -71,11 +71,12 @@ export const COMPANIES: CompanyConfig[] = [
   // not present in the SSR payload (__NEXT_DATA__ has no job data) or discoverable in JS bundles.
   { name: "IBM", slug: "ibm", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
   { name: "Yahoo", slug: "yahoo", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "ouryahoo.wd5.myworkdayjobs.com", company: "ouryahoo", tenant: "careers" } },
-  // Verified Aug 2026: Microsoft does NOT have a dedicated cohort-based APM/rotational program.
-  // "Aspire" is an automatic onboarding journey enrolled for all qualifying new hires — not a
-  // named application-based program. New-grad PMs apply directly to "Program Manager University
-  // Grad" postings. gcsservices.careers.microsoft.com (the old ATS API) remains network-unreachable
-  // server-side. No equivalent cohort program was found to wire up.
+  // Microsoft has no cohort APM program. New-grad PMs apply to "Program Manager University Grad"
+  // postings published each Aug-Oct (and a smaller wave Jan-Mar) on apply.careers.microsoft.com
+  // (Eightfold AI PCSX). No server-accessible JSON API exists: gcsservices.careers.microsoft.com
+  // is fully decommissioned (SSL cert mismatch), and the new Eightfold portal is a pure SPA —
+  // all /api/* paths return 404 HTML to server-side requests. feedUnavailable keeps the entry
+  // visible on the dashboard while flagging that live fetch is not possible server-side.
   { name: "Microsoft", slug: "microsoft", ats: "custom", programName: "Program Manager University Grad", programStatus: "paused", feedUnavailable: true },
   // Custom
   { name: "Google", slug: "google", ats: "custom", programName: "APM Program", programStatus: "active" },
