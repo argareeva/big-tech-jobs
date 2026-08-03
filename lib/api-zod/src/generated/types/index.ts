@@ -12,5 +12,8 @@ export * from './healthStatus';
 export * from './job';
 export * from './jobStats';
 export * from './listJobsParams';
+export * from './listJobsStatus';
 export * from './refreshResult';
 export * from './refreshResultErrorsItem';
+export * from './setAppliedRequest';
+export * from './setAppliedResponse';

@@ -26,6 +26,8 @@ export interface Job {
      * @nullable
      */
   postedOn?: string | null;
+  /** Whether the user has marked this exact posting as applied */
+  applied: boolean;
 }
 
 export interface Company {
@@ -81,6 +83,19 @@ export interface JobStats {
   totalCompanies: number;
   /** @nullable */
   lastRefreshAt: string | null;
+  /** Running count of every job ever marked as applied */
+  appliedJobs: number;
+}
+
+export interface SetAppliedRequest {
+  /** The exact job id to mark/unmark (companySlug + external id) */
+  jobId: string;
+  applied: boolean;
+}
+
+export interface SetAppliedResponse {
+  jobId: string;
+  applied: boolean;
 }
 
 export type ListJobsParams = {
@@ -92,5 +107,18 @@ company?: string;
  * Keyword filter on job title
  */
 q?: string;
+/**
+ * Filter by applied status. "open" (default) excludes jobs marked applied, "applied" returns only jobs marked applied, "all" returns everything.
+ */
+status?: ListJobsStatus;
 };
+
+export type ListJobsStatus = typeof ListJobsStatus[keyof typeof ListJobsStatus];
+
+
+export const ListJobsStatus = {
+  open: 'open',
+  applied: 'applied',
+  all: 'all',
+} as const;
 

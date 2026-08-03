@@ -23,4 +23,6 @@ export interface Job {
      * @nullable
      */
   postedOn?: string | null;
+  /** Whether the user has marked this exact posting as applied */
+  applied: boolean;
 }

@@ -20,9 +20,12 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary List all cached APM/RPM job listings
  */
+export const listJobsQueryStatusDefault = `open`;
+
 export const ListJobsQueryParams = zod.object({
   "company": zod.coerce.string().optional().describe('Filter by company slug'),
-  "q": zod.coerce.string().optional().describe('Keyword filter on job title')
+  "q": zod.coerce.string().optional().describe('Keyword filter on job title'),
+  "status": zod.enum(['open', 'applied', 'all']).default(listJobsQueryStatusDefault).describe('Filter by applied status. \"open\" (default) excludes jobs marked applied, \"applied\" returns only jobs marked applied, \"all\" returns everything.\n')
 })
 
 export const ListJobsResponseItem = zod.object({
@@ -33,9 +36,24 @@ export const ListJobsResponseItem = zod.object({
   "location": zod.string(),
   "applyUrl": zod.string(),
   "source": zod.string().describe('ATS source (greenhouse, lever, workday, google, uber)'),
-  "postedOn": zod.string().nullish().describe('Posting date text if available')
+  "postedOn": zod.string().nullish().describe('Posting date text if available'),
+  "applied": zod.boolean().describe('Whether the user has marked this exact posting as applied')
 })
 export const ListJobsResponse = zod.array(ListJobsResponseItem)
+
+
+/**
+ * @summary Mark or unmark a specific job posting as applied
+ */
+export const SetJobAppliedBody = zod.object({
+  "jobId": zod.string().describe('The exact job id to mark\/unmark (companySlug + external id)'),
+  "applied": zod.boolean()
+})
+
+export const SetJobAppliedResponse = zod.object({
+  "jobId": zod.string(),
+  "applied": zod.boolean()
+})
 
 
 /**
@@ -59,7 +77,8 @@ export const GetJobStatsResponse = zod.object({
   "totalJobs": zod.number(),
   "companiesWithJobs": zod.number(),
   "totalCompanies": zod.number(),
-  "lastRefreshAt": zod.string().nullable()
+  "lastRefreshAt": zod.string().nullable(),
+  "appliedJobs": zod.number().describe('Running count of every job ever marked as applied')
 })
 
 

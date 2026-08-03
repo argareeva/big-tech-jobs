@@ -12,4 +12,6 @@ export interface JobStats {
   totalCompanies: number;
   /** @nullable */
   lastRefreshAt: string | null;
+  /** Running count of every job ever marked as applied */
+  appliedJobs: number;
 }

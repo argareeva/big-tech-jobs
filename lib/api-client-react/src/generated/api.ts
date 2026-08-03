@@ -26,11 +26,13 @@ import type {
   Job,
   JobStats,
   ListJobsParams,
-  RefreshResult
+  RefreshResult,
+  SetAppliedRequest,
+  SetAppliedResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
-import type { ErrorType } from '../custom-fetch';
+import type { ErrorType , BodyType } from '../custom-fetch';
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -217,6 +219,77 @@ export function useListJobs<TData = Awaited<ReturnType<typeof listJobs>>, TError
 
 
 
+
+export const getSetJobAppliedUrl = () => {
+
+
+
+
+  return `/api/jobs/applied`
+}
+
+/**
+ * @summary Mark or unmark a specific job posting as applied
+ */
+export const setJobApplied = async (setAppliedRequest: SetAppliedRequest, options?: Parameters<typeof customFetch>[1]): Promise<SetAppliedResponse> => {
+
+  return customFetch<SetAppliedResponse>(getSetJobAppliedUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setAppliedRequest)
+  }
+);}
+
+
+
+
+
+export const getSetJobAppliedMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setJobApplied>>, TError,{data: BodyType<SetAppliedRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setJobApplied>>, TError,{data: BodyType<SetAppliedRequest>}, TContext> => {
+
+const mutationKey = ['setJobApplied'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setJobApplied>>, {data: BodyType<SetAppliedRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  setJobApplied(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetJobAppliedMutationResult = NonNullable<Awaited<ReturnType<typeof setJobApplied>>>
+    export type SetJobAppliedMutationBody = BodyType<SetAppliedRequest>
+    export type SetJobAppliedMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark or unmark a specific job posting as applied
+ */
+export const useSetJobApplied = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setJobApplied>>, TError,{data: BodyType<SetAppliedRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setJobApplied>>,
+        TError,
+        {data: BodyType<SetAppliedRequest>},
+        TContext
+      > => {
+      return useMutation(getSetJobAppliedMutationOptions(options));
+    }
 
 export const getRefreshJobsUrl = () => {
 

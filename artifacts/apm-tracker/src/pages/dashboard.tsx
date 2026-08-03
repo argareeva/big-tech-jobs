@@ -6,6 +6,7 @@ import {
   useGetJobStats,
   useRefreshJobs,
   useSendDigest,
+  useSetJobApplied,
   getListJobsQueryKey,
   getListCompaniesQueryKey,
   getGetJobStatsQueryKey,
@@ -21,15 +22,50 @@ import { useToast } from '@/hooks/use-toast';
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [showApplied, setShowApplied] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: jobs, isLoading: jobsLoading } = useListJobs(
-    selectedCompany ? { company: selectedCompany, q: searchQuery || undefined } : { q: searchQuery || undefined }
-  );
+  const { data: jobs, isLoading: jobsLoading } = useListJobs({
+    ...(selectedCompany ? { company: selectedCompany } : {}),
+    ...(searchQuery ? { q: searchQuery } : {}),
+    status: showApplied ? 'applied' : 'open',
+  });
 
   const { data: companies, isLoading: companiesLoading } = useListCompanies();
   const { data: stats, isLoading: statsLoading } = useGetJobStats();
+
+  const invalidateJobData = () => {
+    queryClient.invalidateQueries({ queryKey: getListJobsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getListCompaniesQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetJobStatsQueryKey() });
+  };
+
+  const setAppliedMutation = useSetJobApplied({
+    mutation: {
+      onSuccess: (_result, variables) => {
+        invalidateJobData();
+        const applied = variables.data.applied;
+        toast({
+          title: applied ? 'Marked as applied' : 'Moved back to open',
+          description: applied
+            ? "It's tucked under \"Show Applied\" whenever you want to check back."
+            : 'This posting is back in your open positions.',
+        });
+      },
+      onError: () => {
+        toast({
+          title: 'Could not update that job',
+          description: 'Please try again.',
+          variant: 'destructive',
+        });
+      },
+    },
+  });
+
+  const handleToggleApplied = (jobId: string, applied: boolean) => {
+    setAppliedMutation.mutate({ data: { jobId, applied } });
+  };
 
   const digestMutation = useSendDigest({
     mutation: {
@@ -162,6 +198,33 @@ export default function Dashboard() {
 
         {/* Search & Job List */}
         <div>
+          <div className="flex items-center gap-2 mb-4 border-b border-border">
+            <button
+              type="button"
+              onClick={() => setShowApplied(false)}
+              className={`px-1 pb-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                !showApplied
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+              data-testid="tab-show-open"
+            >
+              Open
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowApplied(true)}
+              className={`px-1 pb-2 ml-4 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                showApplied
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+              data-testid="tab-show-applied"
+            >
+              Show Applied{stats?.appliedJobs ? ` (${stats.appliedJobs})` : ''}
+            </button>
+          </div>
+
           <div className="flex items-center gap-4 mb-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -186,7 +249,15 @@ export default function Dashboard() {
             )}
           </div>
 
-          <JobList jobs={displayedJobs} isLoading={jobsLoading} />
+          <JobList
+            jobs={displayedJobs}
+            isLoading={jobsLoading}
+            showApplied={showApplied}
+            onToggleApplied={handleToggleApplied}
+            isUpdatingJobId={
+              setAppliedMutation.isPending ? setAppliedMutation.variables?.data.jobId : undefined
+            }
+          />
         </div>
       </main>
     </div>

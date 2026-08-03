@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ListJobsStatus } from './listJobsStatus';
 
 export type ListJobsParams = {
 /**
@@ -15,4 +16,8 @@ company?: string;
  * Keyword filter on job title
  */
 q?: string;
+/**
+ * Filter by applied status. "open" (default) excludes jobs marked applied, "applied" returns only jobs marked applied, "all" returns everything.
+ */
+status?: ListJobsStatus;
 };

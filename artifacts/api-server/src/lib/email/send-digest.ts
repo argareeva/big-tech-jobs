@@ -5,6 +5,7 @@
 import { Resend } from "resend";
 import { COMPANIES } from "../jobs/companies.js";
 import { fetchForCompany, FEED_UNAVAILABLE, type NormalizedJob } from "../jobs/fetchers.js";
+import { getAppliedJobIds } from "../jobs/applied.js";
 
 export interface DigestResult {
   totalJobs: number;
@@ -24,6 +25,7 @@ export async function sendDigest(log?: {
 
   // ── Fetch all available feeds ────────────────────────────────────────────
   const byCompany = new Map<string, { name: string; jobs: NormalizedJob[] }>();
+  const appliedIds = await getAppliedJobIds();
 
   await Promise.all(
     COMPANIES.map(async (c) => {
@@ -31,8 +33,9 @@ export async function sendDigest(log?: {
       try {
         const result = await fetchForCompany(c);
         if (result === FEED_UNAVAILABLE) return;
-        if (result.length > 0) byCompany.set(c.slug, { name: c.name, jobs: result });
-        log?.info({ company: c.slug, count: result.length }, "digest fetch");
+        const openJobs = result.filter((j) => !appliedIds.has(j.id));
+        if (openJobs.length > 0) byCompany.set(c.slug, { name: c.name, jobs: openJobs });
+        log?.info({ company: c.slug, count: openJobs.length }, "digest fetch");
       } catch (err) {
         log?.warn({ company: c.slug, err }, "digest fetch failed");
       }

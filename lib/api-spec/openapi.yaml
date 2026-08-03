@@ -46,6 +46,16 @@ paths:
           schema:
             type: string
           description: Keyword filter on job title
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, applied, all]
+            default: open
+          description: >
+            Filter by applied status. "open" (default) excludes jobs marked applied,
+            "applied" returns only jobs marked applied, "all" returns everything.
       responses:
         "200":
           description: Job listings
@@ -55,6 +65,24 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Job"
+  /jobs/applied:
+    post:
+      operationId: setJobApplied
+      tags: [jobs]
+      summary: Mark or unmark a specific job posting as applied
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetAppliedRequest"
+      responses:
+        "200":
+          description: Updated applied status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetAppliedResponse"
   /jobs/refresh:
     post:
       operationId: refreshJobs
@@ -116,7 +144,7 @@ components:
         - status
     Job:
       type: object
-      required: [id, title, company, companySlug, location, applyUrl, source]
+      required: [id, title, company, companySlug, location, applyUrl, source, applied]
       properties:
         id:
           type: string
@@ -139,6 +167,9 @@ components:
         postedOn:
           type: ["string", "null"]
           description: Posting date text if available
+        applied:
+          type: boolean
+          description: Whether the user has marked this exact posting as applied
     Company:
       type: object
       required: [name, slug, ats, programName, programStatus, jobCount]
@@ -201,7 +232,7 @@ components:
           type: ["string", "null"]
     JobStats:
       type: object
-      required: [totalJobs, companiesWithJobs, totalCompanies, lastRefreshAt]
+      required: [totalJobs, companiesWithJobs, totalCompanies, lastRefreshAt, appliedJobs]
       properties:
         totalJobs:
           type: number
@@ -211,3 +242,23 @@ components:
           type: number
         lastRefreshAt:
           type: ["string", "null"]
+        appliedJobs:
+          type: number
+          description: Running count of every job ever marked as applied
+    SetAppliedRequest:
+      type: object
+      required: [jobId, applied]
+      properties:
+        jobId:
+          type: string
+          description: The exact job id to mark/unmark (companySlug + external id)
+        applied:
+          type: boolean
+    SetAppliedResponse:
+      type: object
+      required: [jobId, applied]
+      properties:
+        jobId:
+          type: string
+        applied:
+          type: boolean
