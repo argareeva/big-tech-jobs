@@ -49,7 +49,9 @@ export function getJobs(filter?: { company?: string; q?: string }): NormalizedJo
 }
 
 export function getCompanies(): CompanyStatus[] {
-  return COMPANIES.map((c) => status.get(c.slug)!);
+  return COMPANIES.map((c) => status.get(c.slug)!).sort((a, b) =>
+    a.config.name.localeCompare(b.config.name),
+  );
 }
 
 export function getStats() {
