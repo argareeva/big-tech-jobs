@@ -195,6 +195,9 @@ components:
         error:
           type: ["string", "null"]
           description: Last fetch error, if any
+        careersUrl:
+          type: ["string", "null"]
+          description: Careers/job-search page to check manually when there's no fetchable feed
     RefreshResult:
       type: object
       required: [totalJobs, companiesChecked, errors, refreshedAt]

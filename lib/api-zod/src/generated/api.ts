@@ -105,7 +105,8 @@ export const ListCompaniesResponseItem = zod.object({
   "programStatus": zod.string().describe('active | paused'),
   "jobCount": zod.number(),
   "lastCheckedAt": zod.string().nullish().describe('ISO timestamp of last successful fetch'),
-  "error": zod.string().nullish().describe('Last fetch error, if any')
+  "error": zod.string().nullish().describe('Last fetch error, if any'),
+  "careersUrl": zod.string().nullish().describe('Careers\/job-search page to check manually when there\'s no fetchable feed')
 })
 export const ListCompaniesResponse = zod.array(ListCompaniesResponseItem)
 

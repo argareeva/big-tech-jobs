@@ -12,6 +12,8 @@ export interface CompanyConfig {
    * Fetches are skipped cleanly and the dashboard shows "Feed unavailable".
    */
   feedUnavailable?: true;
+  /** Careers/job-search page to link to when there's no fetchable feed, so the user can check manually. */
+  careersUrl?: string;
   /** Greenhouse/Lever board slug */
   boardSlug?: string;
   /** Ashby job board name, e.g. "Perplexity" in https://api.ashbyhq.com/posting-api/job-board/Perplexity */
@@ -53,7 +55,7 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Warner Music Group", slug: "wmg", ats: "lever", programName: "APM Program", programStatus: "active", boardSlug: "wmg" },
   // Workday
   // metacareers.com uses a private Relay/GraphQL endpoint that blocks server-side requests
-  { name: "Meta", slug: "meta", ats: "custom", programName: "RPM Program", programStatus: "active", feedUnavailable: true },
+  { name: "Meta", slug: "meta", ats: "custom", programName: "RPM Program", programStatus: "active", feedUnavailable: true, careersUrl: "https://www.metacareers.com/jobs" },
   { name: "Salesforce", slug: "salesforce", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "salesforce.wd12.myworkdayjobs.com", company: "salesforce", tenant: "External_Career_Site" } },
   { name: "Visa", slug: "visa", ats: "smartrecruiters", programName: "APM Program", programStatus: "active", boardSlug: "Visa" },
   // jobs.intuit.com (Radancy/TalentBrew) server-renders full HTML search results —
@@ -89,13 +91,13 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Atlassian", slug: "atlassian", ats: "custom", programName: "APM Program", programStatus: "active" },
   // shopify.com/careers is a custom client-rendered app (pre-hydration monitor
   // scripts); no discoverable JSON API in page source or via network capture attempts.
-  { name: "Shopify", slug: "shopify", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
+  { name: "Shopify", slug: "shopify", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true, careersUrl: "https://www.shopify.com/careers/search?q=product+manager" },
   // zynga.com/careers redirects to a WordPress marketing page (wp-json oembed only,
   // no job search); real application flow (if any) isn't exposed on this domain.
-  { name: "Zynga", slug: "zynga", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
+  { name: "Zynga", slug: "zynga", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true, careersUrl: "https://www.zynga.com/job-listing/?department=product-management" },
   // ibm.com/careers/search is Next.js but job results load via a client-side call
   // not present in the SSR payload (__NEXT_DATA__ has no job data) or discoverable in JS bundles.
-  { name: "IBM", slug: "ibm", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
+  { name: "IBM", slug: "ibm", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true, careersUrl: "https://www.ibm.com/careers/search?field_keyword_18[0]=Product%20Management" },
   { name: "Yahoo", slug: "yahoo", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "ouryahoo.wd5.myworkdayjobs.com", company: "ouryahoo", tenant: "careers" } },
   // Microsoft has no cohort APM program. New-grad PMs apply to individual "Program
   // Manager University Grad" postings published seasonally (Aug-Oct main wave, smaller
@@ -168,7 +170,7 @@ export const COMPANIES: CompanyConfig[] = [
   // session-scoped AJAX module call (data-ajax-url="/module/postmodule") that
   // returns a redirect on a stateless request — not reliably fetchable without a
   // real browser session. Left unavailable pending future investigation.
-  { name: "BlackRock", slug: "blackrock", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
+  { name: "BlackRock", slug: "blackrock", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true, careersUrl: "https://careers.blackrock.com/search-jobs" },
   // Batch 6 additions — sourced from apmlist.com, full-time entries only
   // (its "Open PM Internships" table was skipped entirely per the no-internship rule).
   // All boards below confirmed live via curl 2026-08-03; 0 current APM matches for

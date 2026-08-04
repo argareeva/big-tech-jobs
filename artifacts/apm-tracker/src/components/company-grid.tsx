@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Company } from '@workspace/api-client-react';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, CheckCircle2, Pause, WifiOff } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink, Pause, WifiOff } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface CompanyGridProps {
@@ -34,6 +34,84 @@ export function CompanyGrid({ companies, onCompanyClick, selectedCompany, isLoad
     setExpandedErrors(newExpanded);
   };
 
+  const trackedCompanies = companies.filter((c) => c.error !== 'unavailable');
+  const noFeedCompanies = companies.filter((c) => c.error === 'unavailable');
+
+  return (
+    <div className="space-y-6">
+      <CompanyCardGrid
+        companies={trackedCompanies}
+        onCompanyClick={onCompanyClick}
+        selectedCompany={selectedCompany}
+        expandedErrors={expandedErrors}
+        toggleError={toggleError}
+      />
+
+      {noFeedCompanies.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <WifiOff className="w-4 h-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-muted-foreground">
+              No feed — track manually ({noFeedCompanies.length})
+            </h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            These companies don't expose a fetchable job feed. Check their career pages directly.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-2">
+            {noFeedCompanies.map((company, index) => (
+              <a
+                key={company.slug}
+                href={company.careersUrl ?? undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`
+                  relative p-3 rounded-md border border-dashed border-card-border bg-muted/30
+                  transition-all duration-200 animate-slide-in-up group
+                  ${company.careersUrl ? 'hover:border-primary/40 hover:shadow-sm cursor-pointer' : 'opacity-60 pointer-events-none'}
+                `}
+                style={{ animationDelay: `${index * 20}ms` }}
+                data-testid={`company-nofeed-${company.slug}`}
+              >
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold text-sm leading-tight truncate flex-1">
+                      {company.name}
+                    </h3>
+                    {company.careersUrl ? (
+                      <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
+                    ) : (
+                      <WifiOff className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {company.careersUrl ? 'View careers page' : 'No feed'}
+                  </span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface CompanyCardGridProps {
+  companies: Company[];
+  onCompanyClick: (slug: string) => void;
+  selectedCompany: string | null;
+  expandedErrors: Set<string>;
+  toggleError: (slug: string) => void;
+}
+
+function CompanyCardGrid({
+  companies,
+  onCompanyClick,
+  selectedCompany,
+  expandedErrors,
+  toggleError,
+}: CompanyCardGridProps) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-2">
       {companies.map((company, index) => {

@@ -68,6 +68,7 @@ router.get("/companies", (_req, res) => {
         jobCount: s.jobCount,
         lastCheckedAt: s.lastCheckedAt,
         error: s.error,
+        careersUrl: s.config.careersUrl ?? null,
       })),
     ),
   );

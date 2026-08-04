@@ -50,6 +50,11 @@ export interface Company {
      * @nullable
      */
   error?: string | null;
+  /**
+     * Careers/job-search page to check manually when there's no fetchable feed
+     * @nullable
+     */
+  careersUrl?: string | null;
 }
 
 export type RefreshResultErrorsItem = {
