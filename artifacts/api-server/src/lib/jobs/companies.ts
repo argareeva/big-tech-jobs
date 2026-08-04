@@ -169,4 +169,30 @@ export const COMPANIES: CompanyConfig[] = [
   // returns a redirect on a stateless request — not reliably fetchable without a
   // real browser session. Left unavailable pending future investigation.
   { name: "BlackRock", slug: "blackrock", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true },
+  // Batch 6 additions — sourced from apmlist.com, full-time entries only
+  // (its "Open PM Internships" table was skipped entirely per the no-internship rule).
+  // All boards below confirmed live via curl 2026-08-03; 0 current APM matches for
+  // several is a real seasonal gap (same as several existing companies), not a
+  // broken feed — each returns hundreds of real postings, just none APM-titled today.
+  { name: "OKX", slug: "okx", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "okx" },
+  { name: "Reddit", slug: "reddit", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "reddit" },
+  { name: "Robinhood", slug: "robinhood", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "robinhood" },
+  { name: "Scale AI", slug: "scaleai", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "scaleai" },
+  { name: "Dropbox", slug: "dropbox", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "dropbox" },
+  { name: "Pinterest", slug: "pinterest", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "pinterest" },
+  // DoorDash's Greenhouse token is "doordashusa", not "doordash" (404s).
+  { name: "DoorDash", slug: "doordash", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "doordashusa" },
+  { name: "Asana", slug: "asana", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "asana" },
+  { name: "Arcade AI", slug: "arcade-ai", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "arcade-ai" },
+  { name: "Sierra AI", slug: "sierra-ai", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "Sierra" },
+  { name: "Kleiner Perkins Fellows", slug: "kp-fellows", ats: "ashby", programName: "Fellows Program", programStatus: "active", ashbyBoardName: "KleinerPerkinsFellows" },
+  // Red Hat — Workday tenant confirmed live: POST returns 200 with real postings
+  // (company=redhat, tenant=jobs; not the more common "External"/"Careers" tenant names).
+  { name: "Red Hat", slug: "redhat", ats: "workday", programName: "APM Program", programStatus: "active",
+    workday: { host: "redhat.wd5.myworkdayjobs.com", company: "redhat", tenant: "jobs" } },
+  // Oracle — same Oracle Recruiting Cloud backend pattern as American Express/JPMorgan,
+  // but this is Oracle's own careers site (eeho.fa.us2.oraclecloud.com, siteNumber CX_1).
+  // Confirmed live; 0 current matches.
+  { name: "Oracle", slug: "oracle", ats: "oracle", programName: "APM Program", programStatus: "active",
+    oracle: { host: "eeho.fa.us2.oraclecloud.com", siteNumber: "CX_1", keyword: "associate product manager", titleMatch: /associate product manager|rotational product manager/i } },
 ];
