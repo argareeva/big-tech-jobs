@@ -57,7 +57,11 @@ export const COMPANIES: CompanyConfig[] = [
   // metacareers.com uses a private Relay/GraphQL endpoint that blocks server-side requests
   { name: "Meta", slug: "meta", ats: "custom", programName: "RPM Program", programStatus: "active", feedUnavailable: true, careersUrl: "https://www.metacareers.com/jobs" },
   { name: "Salesforce", slug: "salesforce", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "salesforce.wd12.myworkdayjobs.com", company: "salesforce", tenant: "External_Career_Site" } },
-  { name: "Visa", slug: "visa", ats: "smartrecruiters", programName: "APM Program", programStatus: "active", boardSlug: "Visa" },
+  // Visa APM Program confirmed closed: SmartRecruiters board returns 200 with
+  // totalFound: 0 (the whole company posting list is empty, not just no APM
+  // matches) — re-verified live 2026-09-01. Marked paused rather than removed
+  // in case it reopens.
+  { name: "Visa", slug: "visa", ats: "smartrecruiters", programName: "APM Program", programStatus: "paused", boardSlug: "Visa" },
   // jobs.intuit.com (Radancy/TalentBrew) server-renders full HTML search results —
   // confirmed live via browser network capture; scraped via fetchIntuit (custom).
   { name: "Intuit", slug: "intuit", ats: "custom", programName: "RPM Program", programStatus: "active" },
