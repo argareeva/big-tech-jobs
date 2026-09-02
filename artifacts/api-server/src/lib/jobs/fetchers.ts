@@ -256,57 +256,6 @@ export async function fetchGoogle(c: CompanyConfig): Promise<NormalizedJob[]> {
 }
 
 /**
- * Uber careers search endpoint (used by jobs.uber.com):
- * POST https://www.uber.com/api/loadSearchJobsResults?localeCode=en
- * Requires header "x-csrf-token: x".
- */
-export async function fetchUber(c: CompanyConfig): Promise<NormalizedJob[]> {
-  const data = (await fetchJson(
-    "https://www.uber.com/api/loadSearchJobsResults?localeCode=en",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-csrf-token": "x" },
-      body: JSON.stringify({
-        params: { query: "Associate Product Manager" },
-        limit: 50,
-        page: 0,
-      }),
-    },
-  )) as {
-    data?: {
-      results?: Array<{
-        id: number;
-        title: string;
-        creationDate?: string;
-        location?: { city?: string | null; countryName?: string | null };
-      }>;
-    };
-  };
-  if (!data.data) {
-    throw new Error(
-      "fetchUber: response envelope changed — data.data is missing. The Uber careers API may have been updated.",
-    );
-  }
-  if (!Array.isArray(data.data.results)) {
-    throw new Error(
-      "fetchUber: response envelope changed — data.data.results is not an array. The Uber careers API may have been updated.",
-    );
-  }
-  return data.data.results
-    .filter((j) => isApmTitle(j.title))
-    .map((j) => ({
-      id: `uber-${j.id}`,
-      title: j.title,
-      company: c.name,
-      companySlug: c.slug,
-      location: [j.location?.city, j.location?.countryName].filter(Boolean).join(", ") || "Unspecified",
-      applyUrl: `https://www.uber.com/global/en/careers/list/${j.id}/`,
-      source: "uber",
-      postedOn: j.creationDate ? j.creationDate.slice(0, 10) : null,
-    }));
-}
-
-/**
  * Oracle Recruiting Cloud (ORC). The public careers.* domain (e.g.
  * careers.americanexpress.com) is usually just a CMS/proxy shell — the real
  * API lives on a *.fa.oraclecloud.com host with a siteNumber, discoverable
@@ -703,7 +652,6 @@ export async function fetchForCompany(
       return fetchAshby(c);
     case "custom":
       if (c.slug === "google") return fetchGoogle(c);
-      if (c.slug === "uber") return fetchUber(c);
       if (c.slug === "atlassian") return fetchAtlassian(c);
       if (c.slug === "intuit") return fetchIntuit(c);
       if (c.slug === "microsoft") return fetchMicrosoft(c);

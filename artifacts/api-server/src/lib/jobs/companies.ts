@@ -51,7 +51,11 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Block", slug: "block", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "block" },
   // Lever
   { name: "Spotify", slug: "spotify", ats: "lever", programName: "APM Program", programStatus: "active", boardSlug: "spotify" },
-  { name: "Plaid", slug: "plaid", ats: "lever", programName: "APM Program", programStatus: "active", boardSlug: "plaid" },
+  // Plaid migrated off Lever to Ashby (confirmed live via the ATS link on an
+  // individual plaid.com/careers/openings/... page, which points at
+  // ashbyhq.com/plaid) — re-verified live 2026-09-01, 102 postings, board
+  // slug is lowercase "plaid" unlike most Ashby boards.
+  { name: "Plaid", slug: "plaid", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "plaid" },
   { name: "Warner Music Group", slug: "wmg", ats: "lever", programName: "APM Program", programStatus: "active", boardSlug: "wmg" },
   // Workday
   // metacareers.com uses a private Relay/GraphQL endpoint that blocks server-side requests
@@ -112,7 +116,15 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Microsoft", slug: "microsoft", ats: "custom", programName: "Program Manager University Grad", programStatus: "active" },
   // Custom
   { name: "Google", slug: "google", ats: "custom", programName: "APM Program", programStatus: "active" },
-  { name: "Uber", slug: "uber", ats: "custom", programName: "APM Program", programStatus: "active" },
+  // Uber migrated its careers site (jobs.uber.com) to a Next.js app on Vercel,
+  // which broke the old www.uber.com/api/loadSearchJobsResults endpoint
+  // (now 404s). The real backend is Oracle Recruiting Cloud, found via a
+  // careers-page network capture: host iaziqy.fa.ocs.oraclecloud.com,
+  // siteNumber CX_1. Re-verified live 2026-09-01 (452 total postings for
+  // "product manager"; 0 exact APM matches currently, a real seasonal gap).
+  { name: "Uber", slug: "uber", ats: "oracle", programName: "APM Program", programStatus: "active",
+    oracle: { host: "iaziqy.fa.ocs.oraclecloud.com", siteNumber: "CX_1", keyword: "associate product manager",
+      titleMatch: /associate product manager|rotational product manager/i } },
   // Batch 2 additions
   // Stripe — Greenhouse board confirmed live
   { name: "Stripe", slug: "stripe", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "stripe" },

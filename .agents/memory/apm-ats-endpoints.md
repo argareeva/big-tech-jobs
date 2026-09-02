@@ -70,7 +70,8 @@ against `Title` client-side rather than trusting the search ranking.
 | Visa | SmartRecruiters | `boardSlug = "Visa"` |
 | Atlassian | Custom | `GET https://www.atlassian.com/endpoint/careers/listings` |
 | Google | Custom HTML | Scrape `/about/careers/applications/jobs/results?q="associate product manager"` |
-| Uber | Custom POST | `POST https://www.uber.com/api/loadSearchJobsResults?localeCode=en` + header `x-csrf-token: x` |
+| Uber | Oracle (ORC) | `host = iaziqy.fa.ocs.oraclecloud.com`, `siteNumber = CX_1` — old custom `www.uber.com/api/loadSearchJobsResults` endpoint died when Uber rebuilt jobs.uber.com as a Next.js/Vercel app; found the new ORC host via a plain HTML fetch of the new site (a `<script>` tag referenced the oraclecloud.com domain directly — no browser network capture needed this time) |
+| Plaid | Ashby | `ashbyBoardName = "plaid"` (lowercase) — migrated off Lever (`api.lever.co/v0/postings/plaid` now 404s); found by fetching one individual `plaid.com/careers/openings/...` posting page and grep'ing for `ashbyhq.com` |
 
 ## feedUnavailable Companies (confirmed blocked server-side)
 
