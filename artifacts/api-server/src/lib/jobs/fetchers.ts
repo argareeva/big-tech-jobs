@@ -33,18 +33,6 @@ export function isApmTitle(title: string): boolean {
   return false;
 }
 
-/**
- * When a company config supplies a custom searchText, any result from that
- * targeted Workday search should be trusted without the generic isApmTitle
- * filter — the search already narrows to the right program. Internships are
- * still excluded regardless of the search match.
- */
-export function isApmTitleOrCustomSearch(title: string, customSearch?: string): boolean {
-  if (isInternshipTitle(title)) return false;
-  if (customSearch) return true; // trust the Workday search narrowing
-  return isApmTitle(title);
-}
-
 const FETCH_TIMEOUT_MS = 15000;
 
 async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
@@ -136,7 +124,10 @@ export async function fetchWorkday(c: CompanyConfig): Promise<NormalizedJob[]> {
     );
   }
   return data.jobPostings
-    .filter((j) => j.title && isApmTitleOrCustomSearch(j.title, wd.searchText))
+    .filter((j) => {
+      if (!j.title || isInternshipTitle(j.title)) return false;
+      return wd.titleMatch ? wd.titleMatch.test(j.title) : isApmTitle(j.title);
+    })
     .map((j) => ({
       id: `${c.slug}-${j.bulletFields?.[0] ?? j.externalPath}`,
       title: j.title,

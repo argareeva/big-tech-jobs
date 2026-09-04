@@ -25,6 +25,14 @@ export interface CompanyConfig {
     company: string;
     /** Override the default "associate product manager" search text */
     searchText?: string;
+    /**
+     * Exact-match regex applied client-side to titles. Required whenever
+     * `searchText` is overridden — Workday's searchText is a fuzzy full-text
+     * search (it can match unrelated jobs, e.g. "Sr Machine Learning Engineer"
+     * for a "graduate business leadership" query), so results are never
+     * trusted purely because they came back from a narrowed search.
+     */
+    titleMatch?: RegExp;
   };
   /**
    * Oracle Recruiting Cloud (ORC). Note: the public-facing careers.* domain is
@@ -130,9 +138,14 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Stripe", slug: "stripe", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "stripe" },
   // Databricks — Greenhouse board confirmed live (1 APM job as of research)
   { name: "Databricks", slug: "databricks", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "databricks" },
-  // PayPal — Workday wd1 tenant=jobs; custom searchText to surface GBLP when open
+  // PayPal — Workday wd1 tenant=jobs; custom searchText to surface GBLP when open.
+  // Bug found 2026-09-04: Workday's searchText is fuzzy full-text, not a filter —
+  // "graduate business leadership" matched an unrelated "Sr Machine Learning
+  // Engineer" posting. Now requires an explicit titleMatch so results are never
+  // trusted just because the search returned them.
   { name: "PayPal", slug: "paypal", ats: "workday", programName: "GBLP", programStatus: "active",
-    workday: { host: "paypal.wd1.myworkdayjobs.com", company: "paypal", tenant: "jobs", searchText: "graduate business leadership" } },
+    workday: { host: "paypal.wd1.myworkdayjobs.com", company: "paypal", tenant: "jobs", searchText: "graduate business leadership",
+      titleMatch: /graduate business leadership|\bgblp\b/i } },
   // American Express — careers.americanexpress.com is a CMS shell; the real ATS is
   // Oracle Recruiting Cloud on egug.fa.us2.oraclecloud.com (siteNumber CX_1),
   // found via browser network capture. Confirmed live; 0 TRP postings open currently.

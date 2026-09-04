@@ -12,7 +12,6 @@ import {
   fetchOracle,
   isApmTitle,
   isInternshipTitle,
-  isApmTitleOrCustomSearch,
   probeWalmartQueryId,
   WALMART_CAREERS_QUERY_ID,
 } from "./fetchers.js";
@@ -87,32 +86,6 @@ describe("isApmTitle — true negatives", () => {
     ["co-op excluded", "Associate Product Manager Co-op"],
   ])("rejects: %s → %s", (_label, title) => {
     expect(isApmTitle(title)).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// isApmTitleOrCustomSearch
-// ---------------------------------------------------------------------------
-
-describe("isApmTitleOrCustomSearch", () => {
-  it("passes through to isApmTitle when no customSearch is provided", () => {
-    expect(isApmTitleOrCustomSearch("Associate Product Manager")).toBe(true);
-    expect(isApmTitleOrCustomSearch("Senior Software Engineer")).toBe(false);
-  });
-
-  it("returns true for any non-internship title when customSearch is provided", () => {
-    expect(isApmTitleOrCustomSearch("Senior Software Engineer", "associate product manager")).toBe(true);
-    expect(isApmTitleOrCustomSearch("Staff Data Scientist", "APM Program")).toBe(true);
-  });
-
-  it("still rejects internship titles even when customSearch is provided", () => {
-    expect(isApmTitleOrCustomSearch("Associate Product Manager Intern", "associate product manager")).toBe(false);
-    expect(isApmTitleOrCustomSearch("APM Internship", "APM")).toBe(false);
-    expect(isApmTitleOrCustomSearch("Product Manager Co-op", "product manager")).toBe(false);
-  });
-
-  it("returns false for internship with no customSearch", () => {
-    expect(isApmTitleOrCustomSearch("Associate Product Manager Intern")).toBe(false);
   });
 });
 
@@ -1389,18 +1362,24 @@ const workdayConfig: CompanyConfig = {
   },
 };
 
-/** Workday config with a custom searchText (bypasses isApmTitle for non-internship titles) */
+/**
+ * Workday config with a custom searchText AND an explicit titleMatch — modeled
+ * on PayPal's real GBLP config. searchText is fuzzy on Workday's side, so
+ * titleMatch is what actually decides which results count, regardless of why
+ * Workday's search surfaced them.
+ */
 const workdayCustomSearchConfig: CompanyConfig = {
-  name: "T-Mobile",
-  slug: "tmobile",
+  name: "PayPal",
+  slug: "paypal",
   ats: "workday",
-  programName: "T-Mobile APM",
+  programName: "GBLP",
   programStatus: "active",
   workday: {
-    host: "tmobile.wd1.myworkdayjobs.com",
-    company: "tmobile",
-    tenant: "external",
-    searchText: "associate product manager",
+    host: "paypal.wd1.myworkdayjobs.com",
+    company: "paypal",
+    tenant: "jobs",
+    searchText: "graduate business leadership",
+    titleMatch: /graduate business leadership|\bgblp\b/i,
   },
 };
 
@@ -1431,7 +1410,7 @@ describe("fetchWorkday — outgoing request shape", () => {
 
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(init.body as string) as { searchText: string };
-    expect(body.searchText).toBe("associate product manager");
+    expect(body.searchText).toBe("graduate business leadership");
   });
 
   it("sends the expected request body shape (appliedFacets, limit, offset)", async () => {
@@ -1568,8 +1547,65 @@ describe("fetchWorkday — APM title filtering and field mapping", () => {
     expect(job!.postedOn).toBeNull();
   });
 
-  it("includes non-APM titles when customSearch is set (trusts the Workday search narrowing)", async () => {
-    // With customSearch, isApmTitleOrCustomSearch returns true for any non-internship title
+  it("regression: excludes an unrelated title even when a custom searchText matched it (real PayPal bug, 2026-09-04)", async () => {
+    // Workday's searchText is fuzzy — "graduate business leadership" matched
+    // an unrelated "Sr Machine Learning Engineer" posting in production.
+    // titleMatch must reject it regardless of why Workday's search returned it.
+    stubFetch(makeWorkdayResponse([
+      {
+        title: "Sr Machine Learning Engineer",
+        externalPath: "/job/San-Jose-California/Sr-Machine-Learning-Engineer_R0137279",
+        locationsText: "2 Locations",
+        postedOn: "2026-09-04",
+        bulletFields: ["R0137279"],
+      },
+    ]));
+    const jobs = await fetchWorkday(workdayCustomSearchConfig);
+    expect(jobs).toEqual([]);
+  });
+
+  it("includes a title matching the configured titleMatch regex even when it doesn't literally say 'product manager'", async () => {
+    stubFetch(makeWorkdayResponse([
+      {
+        title: "Graduate Business Leadership Program Associate",
+        externalPath: "/job/Paypal/GBLP_JR100",
+        locationsText: "San Jose, CA",
+        postedOn: "2026-06-10",
+        bulletFields: ["REQ-100"],
+      },
+    ]));
+    const jobs = await fetchWorkday(workdayCustomSearchConfig);
+    expect(jobs.length).toBe(1);
+    expect(jobs[0].title).toBe("Graduate Business Leadership Program Associate");
+  });
+
+  it("still excludes internship titles even when they match titleMatch", async () => {
+    stubFetch(makeWorkdayResponse([
+      {
+        title: "Graduate Business Leadership Program Intern",
+        externalPath: "/job/Paypal/GBLP-Intern_JR200",
+        locationsText: "San Jose, CA",
+        bulletFields: ["REQ-200"],
+      },
+    ]));
+    const jobs = await fetchWorkday(workdayCustomSearchConfig);
+    expect(jobs).toEqual([]);
+  });
+
+  it("falls back to isApmTitle when no titleMatch is configured, even with a custom searchText", async () => {
+    const noTitleMatchConfig: CompanyConfig = {
+      name: "T-Mobile",
+      slug: "tmobile",
+      ats: "workday",
+      programName: "T-Mobile APM",
+      programStatus: "active",
+      workday: {
+        host: "tmobile.wd1.myworkdayjobs.com",
+        company: "tmobile",
+        tenant: "external",
+        searchText: "associate product manager",
+      },
+    };
     stubFetch(makeWorkdayResponse([
       {
         title: "Senior Software Engineer",
@@ -1579,22 +1615,7 @@ describe("fetchWorkday — APM title filtering and field mapping", () => {
         bulletFields: ["REQ-100"],
       },
     ]));
-    const jobs = await fetchWorkday(workdayCustomSearchConfig);
-    // customSearch trusts the server-side search, so SWE title passes through
-    expect(jobs.length).toBe(1);
-    expect(jobs[0].title).toBe("Senior Software Engineer");
-  });
-
-  it("still excludes internship titles even when customSearch is set", async () => {
-    stubFetch(makeWorkdayResponse([
-      {
-        title: "Associate Product Manager Intern",
-        externalPath: "/job/TMO/APM-Intern_JR200",
-        locationsText: "Bellevue, WA",
-        bulletFields: ["REQ-200"],
-      },
-    ]));
-    const jobs = await fetchWorkday(workdayCustomSearchConfig);
+    const jobs = await fetchWorkday(noTitleMatchConfig);
     expect(jobs).toEqual([]);
   });
 });
