@@ -191,9 +191,10 @@ export const COMPANIES: CompanyConfig[] = [
     workday: { host: "warnerbros.wd5.myworkdayjobs.com", company: "warnerbros", tenant: "global" } },
   { name: "New Balance", slug: "new-balance", ats: "workday", programName: "APM Program", programStatus: "active",
     workday: { host: "newbalance.wd1.myworkdayjobs.com", company: "newbalance", tenant: "Careers" } },
-  // jobs.disneycareers.com (TalentBrew/Radancy, not Oracle) server-renders full HTML
+  // www.disneycareers.com (TalentBrew/Radancy, not Oracle) server-renders full HTML
   // search results — confirmed live; scraped via fetchDisney (custom), modeled on
-  // the existing fetchIntuit TalentBrew scraper.
+  // the existing fetchIntuit TalentBrew scraper. Migrated from jobs.disneycareers.com
+  // (old host now 301s to the bare homepage) — confirmed 2026-09-08.
   { name: "Disney", slug: "disney", ats: "custom", programName: "APM Program", programStatus: "active" },
   // careers.blackrock.com is also TalentBrew, but its job list loads via a
   // session-scoped AJAX module call (data-ajax-url="/module/postmodule") that

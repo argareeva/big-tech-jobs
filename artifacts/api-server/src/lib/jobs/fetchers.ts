@@ -405,22 +405,37 @@ export async function fetchAshby(c: CompanyConfig): Promise<NormalizedJob[]> {
 }
 
 /**
- * jobs.disneycareers.com runs on TalentBrew (Radancy) — same ATS family as
+ * disneycareers.com runs on TalentBrew (Radancy) — same ATS family as
  * Intuit, not Oracle Fusion Cloud Recruiting despite Disney's careers URLs
  * sharing a "/global/en/job/{code}/{id}"-style pattern with some Oracle
  * shops. The search-results page server-renders a plain HTML table;
  * confirmed live via direct fetch (no browser session needed).
+ *
+ * Domain migrated from jobs.disneycareers.com to www.disneycareers.com
+ * (found 2026-09-08: the old host now 301-redirects to the plain homepage,
+ * dropping the search path entirely, which made this fetcher silently
+ * return zero jobs with no error — the page fetched successfully, it just
+ * wasn't a search-results page anymore). Guard below now throws instead of
+ * silently returning zero if the response isn't recognizable as a
+ * search-results page, so a future re-migration surfaces as an error.
  */
 export async function fetchDisney(c: CompanyConfig): Promise<NormalizedJob[]> {
   const res = await fetch(
-    "https://jobs.disneycareers.com/search-jobs/associate%20product%20manager%20OR%20rotational%20product%20manager",
+    "https://www.disneycareers.com/search-jobs/associate%20product%20manager%20OR%20rotational%20product%20manager",
     {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: { "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" },
     },
   );
-  if (!res.ok) throw new Error(`HTTP ${res.status} from jobs.disneycareers.com`);
+  if (!res.ok) throw new Error(`HTTP ${res.status} from www.disneycareers.com`);
   const html = await res.text();
+  if (!html.includes('id="search-results"')) {
+    throw new Error(
+      "www.disneycareers.com response is missing the search-results section — " +
+        "the site likely migrated again or started requiring a browser session. " +
+        "Re-verify the search URL/host with a plain fetch before trusting a zero result.",
+    );
+  }
   const jobs: NormalizedJob[] = [];
   const rowRe =
     /<a href="([^"]+)" data-job-id="(\d+)"[^>]*>\s*<h2>([^<]+)<\/h2>[\s\S]*?<span class="job-date-posted">([^<]*)<\/span>[\s\S]*?<span class="job-location">([^<]*)<\/span>/g;
@@ -437,7 +452,7 @@ export async function fetchDisney(c: CompanyConfig): Promise<NormalizedJob[]> {
       company: c.name,
       companySlug: c.slug,
       location: location || "Unspecified",
-      applyUrl: `https://jobs.disneycareers.com${path}`,
+      applyUrl: `https://www.disneycareers.com${path}`,
       source: "disney",
       postedOn: Number.isNaN(posted.getTime()) ? null : posted.toISOString().slice(0, 10),
     });

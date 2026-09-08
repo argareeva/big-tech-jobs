@@ -438,7 +438,7 @@ describe("probeWalmartQueryId — queryId health check", () => {
 function makeDisneyHtml(
   cards: Array<{ path: string; id: string; title: string; date: string; location: string }>,
 ): string {
-  return cards
+  const rows = cards
     .map(
       (c) =>
         `<a href="${c.path}" data-job-id="${c.id}" class="job-link">` +
@@ -448,6 +448,7 @@ function makeDisneyHtml(
         `\n</a>`,
     )
     .join("\n");
+  return `<section id="search-results" data-total-results="${cards.length}">\n${rows}\n</section>`;
 }
 
 const DISNEY_CARDS = makeDisneyHtml([
@@ -512,7 +513,7 @@ describe("fetchDisney — HTML parser (regression / silent-zero prevention)", ()
     expect(job).toBeDefined();
     expect(job!.title).toBe("Associate Product Manager");
     expect(job!.location).toBe("Burbank, CA");
-    expect(job!.applyUrl).toBe("https://jobs.disneycareers.com/job/disney-123");
+    expect(job!.applyUrl).toBe("https://www.disneycareers.com/job/disney-123");
     expect(job!.source).toBe("disney");
     expect(job!.companySlug).toBe("disney");
   });
