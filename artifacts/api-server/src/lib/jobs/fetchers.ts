@@ -57,13 +57,33 @@ const QUALIFIER_WORD_PATTERNS = [
 ];
 const QUALIFIER_WORD_RE = new RegExp(`\\b(?:${QUALIFIER_WORD_PATTERNS.join("|")})\\b`, "i");
 
+// Task #55 (2026-09-08): dropping the adjacency requirement above surfaced
+// real false positives — titles that pair a qualifier word with "product"/
+// "program" but are actually senior individual-contributor or
+// marketing-department roles, not entry-level APM/PM programs (e.g.
+// "Senior Associate, Product Management" and "Associate Director of Product
+// Marketing"). This is a light-touch exclusion, scoped to Layer 1 only: if a
+// seniority/leadership or marketing-department word also appears in the
+// title, it's excluded even though the qualifier + product/program
+// co-occurrence rule matched. This does NOT reinstate the old adjacency
+// requirement the user explicitly asked to drop — it only carves out titles
+// that are clearly not APM/PM programs. See
+// .agents/memory/apm-title-matching-scope.md.
+const SENIORITY_OR_MARKETING_EXCLUSION_RE =
+  /\b(director|vp|vice[\s-]?president|chief|senior|marketing)\b/i;
+
 export function isApmTitle(title: string): boolean {
   if (isInternshipTitle(title)) return false;
   const t = title.toLowerCase();
 
   // Layer 1: broad pattern — "product"/"program" co-occurring anywhere in
-  // the title with an entry-level/rotational qualifier word.
-  if ((t.includes("product") || t.includes("program")) && QUALIFIER_WORD_RE.test(t)) return true;
+  // the title with an entry-level/rotational qualifier word. Excludes
+  // titles that also carry a seniority/leadership or marketing-department
+  // word (see SENIORITY_OR_MARKETING_EXCLUSION_RE above) — those are false
+  // positives from the broadened rule, not true entry-level PM programs.
+  if ((t.includes("product") || t.includes("program")) && QUALIFIER_WORD_RE.test(t)) {
+    return !SENIORITY_OR_MARKETING_EXCLUSION_RE.test(t);
+  }
 
   // Titles that express the same entry-level-program intent without literally
   // containing "product"/"program" alongside one of the qualifier words above.

@@ -93,13 +93,11 @@ describe("isApmTitle — true positives", () => {
     ["graduate program qualifier", "Product Manager, Graduate Program"],
     ["new grad with other qualifying words", "Technical Product Manager – New Grad"],
     // Widened scope, no longer excluded by the old adjacency requirement —
-    // "associate"/"product" both appear in the title, just not adjacent. This
-    // is a known, user-accepted trade-off (see
-    // .agents/memory/apm-title-matching-scope.md): it also means titles like
-    // "Associate Director of Product Marketing" now match even though they
-    // aren't APM roles — flagged to the user rather than silently narrowed.
-    ["associate not adjacent to product (now matches)", "Senior Associate, Product Management"],
-    ["associate director of product marketing (now matches, false-positive risk)", "Associate Director of Product Marketing"],
+    // "associate"/"product" both appear in the title, just not adjacent, and
+    // neither pairs with a seniority/marketing exclusion word. This is a
+    // known, user-accepted trade-off (see
+    // .agents/memory/apm-title-matching-scope.md).
+    ["associate not adjacent to product manager", "Associate, Product Manager"],
   ])("matches: %s → %s", (_label, title) => {
     expect(isApmTitle(title)).toBe(true);
   });
@@ -186,6 +184,30 @@ describe("isApmTitle — true negatives", () => {
     ["rotational + product but internship", "Rotational Product Manager Intern"],
   ])("rejects: %s → %s", (_label, title) => {
     expect(isApmTitle(title)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isApmTitle — Task #55: seniority/marketing exclusion (false-positive cleanup)
+// ---------------------------------------------------------------------------
+
+describe("isApmTitle — seniority/marketing exclusion (Task #55)", () => {
+  it.each([
+    ["senior associate, not entry-level", "Senior Associate, Product Management"],
+    ["associate director of product marketing", "Associate Director of Product Marketing"],
+    ["vp with associate qualifier", "Associate to the VP of Product"],
+    ["vice president spelled out", "Associate Vice President, Product Strategy"],
+    ["chief with associate qualifier", "Associate to the Chief Product Officer"],
+    ["marketing department, not PM", "New Grad Product Marketing Associate"],
+    ["director program manager", "Associate Director, Program Management"],
+  ])("rejects: %s → %s", (_label, title) => {
+    expect(isApmTitle(title)).toBe(false);
+  });
+
+  it("still matches ordinary entry-level titles unaffected by the exclusion", () => {
+    expect(isApmTitle("Associate Product Manager")).toBe(true);
+    expect(isApmTitle("Rotational Product Manager")).toBe(true);
+    expect(isApmTitle("Associate Program Manager")).toBe(true);
   });
 });
 
