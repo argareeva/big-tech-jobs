@@ -61,6 +61,11 @@ describe("isApmTitle — true positives", () => {
     ["APM product in title", "APM, Product Growth"],
     ["RPM with product", "RPM Product Manager"],
     ["apm lowercase with product", "Senior apm, product track"],
+    ["associate program manager", "Associate Program Manager"],
+    ["rotational program manager", "Rotational Program Manager"],
+    ["associate program manager with suffix", "Associate Program Manager - Launch"],
+    ["bare APM with program", "APM – Program"],
+    ["RPM with program", "RPM Program Manager"],
   ])("matches: %s → %s", (_label, title) => {
     expect(isApmTitle(title)).toBe(true);
   });
@@ -84,6 +89,9 @@ describe("isApmTitle — true negatives", () => {
     ["graduate without business leadership", "Graduate Software Engineer"],
     ["APM intern still excluded", "APM Product Intern"],
     ["co-op excluded", "Associate Product Manager Co-op"],
+    ["bare program manager not scoped as entry-level", "Program Manager"],
+    ["senior program manager not entry-level", "Senior Program Manager, Launch Operations"],
+    ["program manager intern excluded", "Associate Program Manager Intern"],
   ])("rejects: %s → %s", (_label, title) => {
     expect(isApmTitle(title)).toBe(false);
   });
@@ -529,6 +537,41 @@ describe("fetchDisney — HTML parser (regression / silent-zero prevention)", ()
   it("throws when the HTTP response is non-2xx", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
     await expect(fetchDisney(disneyConfig)).rejects.toThrow("HTTP 503");
+  });
+
+  it("regression: parses location/date correctly when they appear in a different order (real bug, 2026-09-08)", async () => {
+    // Disney's card template isn't consistent: some cards render
+    // job-brand → job-location → job-date-posted instead of the
+    // date-then-location order the original regex assumed, which silently
+    // attributed the wrong location to a real posting.
+    const html =
+      '<section id="search-results">' +
+      '<a href="/en/job/new-york/associate-program-manager/391/999" data-job-id="999">' +
+      "<h2>Associate Program Manager</h2>" +
+      '<span class="job-brand">Disney Direct to Consumer</span>' +
+      '<span class="job-location">New York,  New York</span>' +
+      '<span class="job-date-posted">Sep. 03, 2026</span>' +
+      "</a></section>";
+    stubFetchHtml(html);
+    const jobs = await fetchDisney(disneyConfig);
+    expect(jobs.length).toBe(1);
+    expect(jobs[0].location).toBe("New York, New York");
+    expect(jobs[0].postedOn).toBe("2026-09-03");
+  });
+
+  it("includes an 'Associate Program Manager' title (added alongside Product Manager, 2026-09-08)", async () => {
+    stubFetchHtml(makeDisneyHtml([
+      { path: "/job/disney-300", id: "300", title: "Associate Program Manager", date: "Sep. 3 2026", location: "New York, NY" },
+    ]));
+    const jobs = await fetchDisney(disneyConfig);
+    expect(jobs.some((j) => j.title === "Associate Program Manager")).toBe(true);
+  });
+
+  it("dedupes a job that appears in both the product-manager and program-manager search pages", async () => {
+    stubFetchHtml(DISNEY_CARDS);
+    const jobs = await fetchDisney(disneyConfig);
+    const ids = jobs.map((j) => j.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
 

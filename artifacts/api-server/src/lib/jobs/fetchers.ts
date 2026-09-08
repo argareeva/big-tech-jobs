@@ -12,7 +12,7 @@ export interface NormalizedJob {
 }
 
 const APM_KEYWORDS =
-  /\b(associate product manager|rotational product manager|graduate business leadership|apm|rpm)\b/i;
+  /\b(associate product manager|rotational product manager|associate program manager|rotational program manager|graduate business leadership|apm|rpm)\b/i;
 
 // Internships/co-ops/summer programs are excluded everywhere — this tracker is
 // scoped to full-time openings only (see isApmTitle).
@@ -23,13 +23,27 @@ export function isInternshipTitle(title: string): boolean {
 }
 
 // RPM also means "revolutions per minute"/"remote patient monitoring" in some titles;
-// require "product" context when matching bare apm/rpm acronyms.
+// require "product"/"program" context when matching bare apm/rpm acronyms.
+//
+// "Program Manager" titles were added 2026-09-08 alongside "Product Manager" —
+// user confirmed this should apply globally, not just to the Disney posting
+// that surfaced it. Scope stays limited to "Associate ___ Manager" /
+// "Rotational ___ Manager" (entry-level framing), same as the product-manager
+// side — a bare "Program Manager" title still won't match, to avoid pulling in
+// senior/experienced-hire program-manager roles that aren't APM/RPM programs.
 export function isApmTitle(title: string): boolean {
   if (isInternshipTitle(title)) return false;
   const t = title.toLowerCase();
-  if (t.includes("associate product manager") || t.includes("rotational product manager")) return true;
+  if (
+    t.includes("associate product manager") ||
+    t.includes("rotational product manager") ||
+    t.includes("associate program manager") ||
+    t.includes("rotational program manager")
+  ) {
+    return true;
+  }
   if (t.includes("graduate business leadership")) return true; // PayPal GBLP
-  if (/\b(apm|rpm)\b/i.test(t) && t.includes("product")) return true;
+  if (/\b(apm|rpm)\b/i.test(t) && (t.includes("product") || t.includes("program"))) return true;
   return false;
 }
 
@@ -419,40 +433,71 @@ export async function fetchAshby(c: CompanyConfig): Promise<NormalizedJob[]> {
  * silently returning zero if the response isn't recognizable as a
  * search-results page, so a future re-migration surfaces as an error.
  */
-export async function fetchDisney(c: CompanyConfig): Promise<NormalizedJob[]> {
-  const res = await fetch(
-    "https://www.disneycareers.com/search-jobs/associate%20product%20manager%20OR%20rotational%20product%20manager",
-    {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      headers: { "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" },
-    },
-  );
-  if (!res.ok) throw new Error(`HTTP ${res.status} from www.disneycareers.com`);
+// Matches one job-card anchor block; job-brand/job-location/job-date-posted
+// spans appear in inconsistent order across Disney's card templates (found
+// 2026-09-08: some cards render location before the date, others after), so
+// this only anchors on the href/id/title and hands the rest of the block to
+// DISNEY_LOCATION_RE / DISNEY_DATE_RE for order-independent extraction.
+const DISNEY_ROW_RE = /<a href="([^"]+)" data-job-id="(\d+)"[^>]*>\s*<h2>([^<]+)<\/h2>([\s\S]*?)<\/a>/g;
+const DISNEY_LOCATION_RE = /<span class="job-location">([^<]*)<\/span>/;
+const DISNEY_DATE_RE = /<span class="job-date-posted">([^<]*)<\/span>/;
+
+/**
+ * Runs one Disney careers search query and returns its raw job-card matches.
+ * The site's relevance ranking only surfaces a handful of cards near the top
+ * of a broad keyword search, so "product manager" and "program manager"
+ * openings need separate quoted queries — a single combined query buries or
+ * drops results, and a multi-quote combined query 302-redirects unreliably.
+ */
+async function fetchDisneySearchPage(
+  query: string,
+): Promise<{ path: string; id: string; rawTitle: string; postedRaw: string; rawLocation: string }[]> {
+  const res = await fetch(`https://www.disneycareers.com/search-jobs/${encodeURIComponent(query)}`, {
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    headers: { "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} from www.disneycareers.com for query "${query}"`);
   const html = await res.text();
   if (!html.includes('id="search-results"')) {
     throw new Error(
-      "www.disneycareers.com response is missing the search-results section — " +
+      `www.disneycareers.com response for query "${query}" is missing the search-results section — ` +
         "the site likely migrated again or started requiring a browser session. " +
         "Re-verify the search URL/host with a plain fetch before trusting a zero result.",
     );
   }
-  const jobs: NormalizedJob[] = [];
-  const rowRe =
-    /<a href="([^"]+)" data-job-id="(\d+)"[^>]*>\s*<h2>([^<]+)<\/h2>[\s\S]*?<span class="job-date-posted">([^<]*)<\/span>[\s\S]*?<span class="job-location">([^<]*)<\/span>/g;
+  const rows: { path: string; id: string; rawTitle: string; postedRaw: string; rawLocation: string }[] = [];
+  const rowRe = new RegExp(DISNEY_ROW_RE.source, "g");
   let m: RegExpExecArray | null;
   while ((m = rowRe.exec(html)) !== null) {
-    const [, path, id, rawTitle, postedRaw, rawLocation] = m;
-    const title = rawTitle.replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
+    const [, path, id, rawTitle, block] = m;
+    const rawLocation = block.match(DISNEY_LOCATION_RE)?.[1] ?? "";
+    const postedRaw = block.match(DISNEY_DATE_RE)?.[1] ?? "";
+    rows.push({ path, id, rawTitle, postedRaw, rawLocation });
+  }
+  return rows;
+}
+
+export async function fetchDisney(c: CompanyConfig): Promise<NormalizedJob[]> {
+  const pages = await Promise.all([
+    fetchDisneySearchPage('"associate product manager"'),
+    fetchDisneySearchPage('"associate program manager"'),
+  ]);
+  const seenIds = new Set<string>();
+  const jobs: NormalizedJob[] = [];
+  for (const row of pages.flat()) {
+    if (seenIds.has(row.id)) continue;
+    seenIds.add(row.id);
+    const title = row.rawTitle.replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
     if (!isApmTitle(title)) continue;
-    const location = rawLocation.replace(/\s+/g, " ").trim();
-    const posted = new Date(postedRaw.replace(".", ""));
+    const location = row.rawLocation.replace(/\s+/g, " ").trim();
+    const posted = new Date(row.postedRaw.replace(".", ""));
     jobs.push({
-      id: `disney-${id}`,
+      id: `disney-${row.id}`,
       title,
       company: c.name,
       companySlug: c.slug,
       location: location || "Unspecified",
-      applyUrl: `https://www.disneycareers.com${path}`,
+      applyUrl: `https://www.disneycareers.com${row.path}`,
       source: "disney",
       postedOn: Number.isNaN(posted.getTime()) ? null : posted.toISOString().slice(0, 10),
     });

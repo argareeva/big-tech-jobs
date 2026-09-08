@@ -72,7 +72,7 @@ against `Title` client-side rather than trusting the search ranking.
 | Google | Custom HTML | Scrape `/about/careers/applications/jobs/results?q="associate product manager"` |
 | Uber | Oracle (ORC) | `host = iaziqy.fa.ocs.oraclecloud.com`, `siteNumber = CX_1` — old custom `www.uber.com/api/loadSearchJobsResults` endpoint died when Uber rebuilt jobs.uber.com as a Next.js/Vercel app; found the new ORC host via a plain HTML fetch of the new site (a `<script>` tag referenced the oraclecloud.com domain directly — no browser network capture needed this time) |
 | Plaid | Ashby | `ashbyBoardName = "plaid"` (lowercase) — migrated off Lever (`api.lever.co/v0/postings/plaid` now 404s); found by fetching one individual `plaid.com/careers/openings/...` posting page and grep'ing for `ashbyhq.com` |
-| Disney | Custom (TalentBrew) | Host migrated `jobs.disneycareers.com` → `www.disneycareers.com` (old host now 301s to the bare homepage, dropping the search path) — found 2026-09-04 |
+| Disney | Custom (TalentBrew) | Host migrated `jobs.disneycareers.com` → `www.disneycareers.com` (old host now 301s to the bare homepage, dropping the search path) — found 2026-09-04. Search needs a quoted phrase per program name (e.g. `"associate program manager"`) issued as a separate request — an unquoted multi-term OR query buries/drops real matches in relevance ranking, and combining multiple quoted phrases in one query 302-redirects unreliably. Card field order (job-brand/location/date) is inconsistent between cards, so parse each field independently rather than assuming a fixed order. |
 
 ## feedUnavailable Companies (confirmed blocked server-side)
 
