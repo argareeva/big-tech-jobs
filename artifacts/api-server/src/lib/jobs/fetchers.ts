@@ -11,9 +11,6 @@ export interface NormalizedJob {
   postedOn: string | null;
 }
 
-const APM_KEYWORDS =
-  /\b(associate product manager|rotational product manager|associate program manager|rotational program manager|graduate business leadership|apm|rpm)\b/i;
-
 // Internships/co-ops/summer programs are excluded everywhere — this tracker is
 // scoped to full-time openings only (see isApmTitle).
 const INTERNSHIP_KEYWORDS = /\b(intern|internship|co-?op|summer associate|summer analyst)\b/i;
@@ -31,19 +28,27 @@ export function isInternshipTitle(title: string): boolean {
 // "Rotational ___ Manager" (entry-level framing), same as the product-manager
 // side — a bare "Program Manager" title still won't match, to avoid pulling in
 // senior/experienced-hire program-manager roles that aren't APM/RPM programs.
+//
+// Broadened again 2026-09-08 after the Mastercard "Associate Product
+// Specialist, Product Management" posting was missed:
+// 1. "Associate"/"Rotational" immediately followed by a product/program word
+//    (not just "Manager") — e.g. "Associate Product Specialist". Requires
+//    immediate adjacency so it still excludes things like "Senior Associate,
+//    Product Management" (comma breaks adjacency — that's a mid/senior
+//    finance-style title, not an entry-level program).
+// 2. Titles explicitly labeled "New Grad" with product/program context, even
+//    without "Associate"/"Rotational" — e.g. "Product Manager, New Grad" —
+//    since "new grad" is itself an unambiguous entry-level signal.
+const ASSOCIATE_OR_ROTATIONAL_PRODUCT_OR_PROGRAM_RE = /\b(?:associate|rotational)\s+(?:product|program)\w*\b/i;
+const NEW_GRAD_RE = /new[\s-]?grad/i;
+
 export function isApmTitle(title: string): boolean {
   if (isInternshipTitle(title)) return false;
   const t = title.toLowerCase();
-  if (
-    t.includes("associate product manager") ||
-    t.includes("rotational product manager") ||
-    t.includes("associate program manager") ||
-    t.includes("rotational program manager")
-  ) {
-    return true;
-  }
+  if (ASSOCIATE_OR_ROTATIONAL_PRODUCT_OR_PROGRAM_RE.test(t)) return true;
   if (t.includes("graduate business leadership")) return true; // PayPal GBLP
   if (/\b(apm|rpm)\b/i.test(t) && (t.includes("product") || t.includes("program"))) return true;
+  if (NEW_GRAD_RE.test(t) && (t.includes("product") || t.includes("program"))) return true;
   return false;
 }
 

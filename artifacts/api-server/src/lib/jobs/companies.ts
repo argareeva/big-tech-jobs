@@ -227,4 +227,15 @@ export const COMPANIES: CompanyConfig[] = [
   // Confirmed live; 0 current matches.
   { name: "Oracle", slug: "oracle", ats: "oracle", programName: "APM Program", programStatus: "active",
     oracle: { host: "eeho.fa.us2.oraclecloud.com", siteNumber: "CX_1", keyword: "associate product manager", titleMatch: /associate product manager|rotational product manager/i } },
+  // Mastercard — careers.mastercard.com is a Phenom People CMS skin over a real
+  // Workday tenant (host mastercard.wd1.myworkdayjobs.com, site CorporateCareers),
+  // found via a live job page's apply link. Confirmed live: POST returns 200 with
+  // real postings, including "Associate Product Specialist, Product Management"
+  // (found 2026-09-08 from a user-supplied job link). The default fetchWorkday
+  // searchText ("associate product manager") doesn't surface that posting in its
+  // top 20 fuzzy-ranked results — searchText "associate product" does (confirmed
+  // live). isApmTitle (broadened the same day) does the actual title filtering,
+  // so this override only widens the candidate pool, same PayPal-style pattern.
+  { name: "Mastercard", slug: "mastercard", ats: "workday", programName: "APM Program", programStatus: "active",
+    workday: { host: "mastercard.wd1.myworkdayjobs.com", company: "mastercard", tenant: "CorporateCareers", searchText: "associate product" } },
 ];

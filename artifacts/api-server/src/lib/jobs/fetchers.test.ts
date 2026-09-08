@@ -66,6 +66,14 @@ describe("isApmTitle — true positives", () => {
     ["associate program manager with suffix", "Associate Program Manager - Launch"],
     ["bare APM with program", "APM – Program"],
     ["RPM with program", "RPM Program Manager"],
+    // Mastercard-driven broadening, 2026-09-08 — "Associate"/"Rotational" +
+    // any product/program word (not just "Manager"), and explicit "New Grad" labels.
+    ["associate product specialist (Mastercard)", "Associate Product Specialist, Product Management"],
+    ["rotational program analyst", "Rotational Program Analyst"],
+    ["associate program coordinator", "Associate Program Coordinator"],
+    ["new grad product manager", "Product Manager, New Grad"],
+    ["new grad prefix", "New Grad - Program Manager"],
+    ["new-grad hyphenated", "Program Manager (New-Grad)"],
   ])("matches: %s → %s", (_label, title) => {
     expect(isApmTitle(title)).toBe(true);
   });
@@ -92,6 +100,16 @@ describe("isApmTitle — true negatives", () => {
     ["bare program manager not scoped as entry-level", "Program Manager"],
     ["senior program manager not entry-level", "Senior Program Manager, Launch Operations"],
     ["program manager intern excluded", "Associate Program Manager Intern"],
+    // Mastercard-driven broadening negatives, 2026-09-08 — comma breaks the
+    // "Associate"/"Rotational" adjacency requirement, so senior/unrelated
+    // "Associate ___" titles that aren't directly product/program don't match.
+    ["senior associate not adjacent to product", "Senior Associate, Product Management"],
+    ["associate general counsel unrelated", "Associate General Counsel"],
+    ["associate director of product marketing", "Associate Director of Product Marketing"],
+    ["bare product manager without new grad or associate", "Product Manager"],
+    ["senior product manager not entry-level", "Senior Product Manager"],
+    ["new grad specialist intern excluded", "New Grad Product Manager Intern"],
+    ["graduate program without product/program keyword", "New Grad Software Engineer"],
   ])("rejects: %s → %s", (_label, title) => {
     expect(isApmTitle(title)).toBe(false);
   });
