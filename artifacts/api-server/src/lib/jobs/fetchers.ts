@@ -22,34 +22,72 @@ export function isInternshipTitle(title: string): boolean {
 // RPM also means "revolutions per minute"/"remote patient monitoring" in some titles;
 // require "product"/"program" context when matching bare apm/rpm acronyms.
 //
-// "Program Manager" titles were added 2026-09-08 alongside "Product Manager" —
-// user confirmed this should apply globally, not just to the Disney posting
-// that surfaced it. Scope stays limited to "Associate ___ Manager" /
-// "Rotational ___ Manager" (entry-level framing), same as the product-manager
-// side — a bare "Program Manager" title still won't match, to avoid pulling in
-// senior/experienced-hire program-manager roles that aren't APM/RPM programs.
-//
-// Broadened again 2026-09-08 after the Mastercard "Associate Product
-// Specialist, Product Management" posting was missed:
-// 1. "Associate"/"Rotational" immediately followed by a product/program word
-//    (not just "Manager") — e.g. "Associate Product Specialist". Requires
-//    immediate adjacency so it still excludes things like "Senior Associate,
-//    Product Management" (comma breaks adjacency — that's a mid/senior
-//    finance-style title, not an entry-level program).
-// 2. Titles explicitly labeled "New Grad" with product/program context, even
-//    without "Associate"/"Rotational" — e.g. "Product Manager, New Grad" —
-//    since "new grad" is itself an unambiguous entry-level signal.
-const ASSOCIATE_OR_ROTATIONAL_PRODUCT_OR_PROGRAM_RE = /\b(?:associate|rotational)\s+(?:product|program)\w*\b/i;
-const NEW_GRAD_RE = /new[\s-]?grad/i;
+// Layer 1 (2026-09-08): replaced the earlier ad hoc adjacency-based rules
+// with a two-word co-occurrence rule, per an explicit user-provided spec —
+// a title is a candidate whenever it contains "product" or "program" AND
+// also contains one of a fixed list of entry-level/rotational qualifier
+// words. This is intentionally broader than the previous rule, which
+// required the qualifier word to sit immediately before "product"/"program"
+// (e.g. "Senior Associate, Product Management" used to be excluded because
+// the comma broke adjacency — it now matches, since "associate" and
+// "product" both appear in the title regardless of position). The user was
+// told this trade-off explicitly and asked for the broader rule anyway; see
+// .agents/memory/apm-title-matching-scope.md for the history. Extended one
+// step past the literal spec (which named "product" only) to also pair
+// qualifiers with "program", to keep the tracker's existing
+// program-manager coverage (e.g. Disney's "Associate Program Manager",
+// Mastercard's "Associate Program Analyst") working under the new rule
+// instead of silently regressing it.
+const QUALIFIER_WORD_PATTERNS = [
+  "associate",
+  "new[\\s-]?grad(?:uate)?",
+  "entry[\\s-]?level",
+  "recent graduate",
+  "university graduate",
+  "campus",
+  "rotational",
+  "early career",
+  "junior",
+  "apprentice",
+  "fellow",
+  "academy",
+  "xcelerator",
+  "builder",
+  "graduate program",
+];
+const QUALIFIER_WORD_RE = new RegExp(`\\b(?:${QUALIFIER_WORD_PATTERNS.join("|")})\\b`, "i");
 
 export function isApmTitle(title: string): boolean {
   if (isInternshipTitle(title)) return false;
   const t = title.toLowerCase();
-  if (ASSOCIATE_OR_ROTATIONAL_PRODUCT_OR_PROGRAM_RE.test(t)) return true;
+
+  // Layer 1: broad pattern — "product"/"program" co-occurring anywhere in
+  // the title with an entry-level/rotational qualifier word.
+  if ((t.includes("product") || t.includes("program")) && QUALIFIER_WORD_RE.test(t)) return true;
+
+  // Titles that express the same entry-level-program intent without literally
+  // containing "product"/"program" alongside one of the qualifier words above.
   if (t.includes("graduate business leadership")) return true; // PayPal GBLP
   if (/\b(apm|rpm)\b/i.test(t) && (t.includes("product") || t.includes("program"))) return true;
-  if (NEW_GRAD_RE.test(t) && (t.includes("product") || t.includes("program"))) return true;
+
   return false;
+}
+
+/**
+ * Layer 2: per-company alias list. Some companies' entry-level PM titles
+ * don't contain "product"/"program" at all (e.g. Jane Street's "Strategy and
+ * Product") or pair "product" with a word that isn't in the generic
+ * qualifier list (e.g. Figma's "Early Career", which has no "product"/
+ * "program" token at all) — `titleAliases` on a CompanyConfig lets a plain
+ * literal substring always count as a match for that company, independent
+ * of the generic Layer 1 rule above. Case-insensitive, extend by adding a
+ * string to a company's `titleAliases` array in companies.ts.
+ */
+export function matchesApmTitle(title: string, c: CompanyConfig): boolean {
+  if (!title || isInternshipTitle(title)) return false;
+  const t = title.toLowerCase();
+  if (c.titleAliases?.some((alias) => t.includes(alias.toLowerCase()))) return true;
+  return isApmTitle(title);
 }
 
 const FETCH_TIMEOUT_MS = 15000;
@@ -80,7 +118,7 @@ export async function fetchGreenhouse(c: CompanyConfig): Promise<NormalizedJob[]
     );
   }
   return data.jobs
-    .filter((j) => isApmTitle(j.title))
+    .filter((j) => matchesApmTitle(j.title, c))
     .map((j) => ({
       id: `${c.slug}-${j.id}`,
       title: j.title,
@@ -105,7 +143,7 @@ export async function fetchLever(c: CompanyConfig): Promise<NormalizedJob[]> {
     );
   }
   return data
-    .filter((j) => isApmTitle(j.text))
+    .filter((j) => matchesApmTitle(j.text, c))
     .map((j) => ({
       id: `${c.slug}-${j.id}`,
       title: j.text,
@@ -145,7 +183,7 @@ export async function fetchWorkday(c: CompanyConfig): Promise<NormalizedJob[]> {
   return data.jobPostings
     .filter((j) => {
       if (!j.title || isInternshipTitle(j.title)) return false;
-      return wd.titleMatch ? wd.titleMatch.test(j.title) : isApmTitle(j.title);
+      return wd.titleMatch ? wd.titleMatch.test(j.title) : matchesApmTitle(j.title, c);
     })
     .map((j) => ({
       id: `${c.slug}-${j.bulletFields?.[0] ?? j.externalPath}`,
@@ -172,7 +210,7 @@ export async function fetchSmartRecruiters(c: CompanyConfig): Promise<Normalized
     }>;
   };
   return (data.content ?? [])
-    .filter((j) => isApmTitle(j.name))
+    .filter((j) => matchesApmTitle(j.name, c))
     .map((j) => ({
       id: `${c.slug}-${j.id}`,
       title: j.name,
@@ -201,7 +239,7 @@ export async function fetchAtlassian(c: CompanyConfig): Promise<NormalizedJob[]>
     portalJobPost?: { portalUrl?: string };
   }>;
   return (Array.isArray(data) ? data : [])
-    .filter((j) => isApmTitle(j.title))
+    .filter((j) => matchesApmTitle(j.title, c))
     .map((j) => ({
       id: `${c.slug}-${j.id}`,
       title: j.title,
@@ -246,7 +284,7 @@ export async function fetchGoogle(c: CompanyConfig): Promise<NormalizedJob[]> {
     if (seen.has(id)) continue;
     seen.add(id);
     const title = rawTitle.replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"');
-    if (!isApmTitle(title)) continue;
+    if (!matchesApmTitle(title, c)) continue;
     // Location: nearest preceding r0wTof span before this anchor
     const before = html.slice(Math.max(0, m.index - 4000), m.index);
     const locMatches = [...before.matchAll(/class="r0wTof\s*"[^>]*>([^<]+)</g)];
@@ -329,7 +367,7 @@ export async function fetchIntuit(c: CompanyConfig): Promise<NormalizedJob[]> {
   while ((m = cardRe.exec(html)) !== null) {
     const [, path, id, rawTitle, location] = m;
     const title = rawTitle.replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"');
-    if (!isApmTitle(title)) continue;
+    if (!matchesApmTitle(title, c)) continue;
     jobs.push({
       id: `intuit-${id}`,
       title,
@@ -410,7 +448,7 @@ export async function fetchAshby(c: CompanyConfig): Promise<NormalizedJob[]> {
     );
   }
   return data.jobs
-    .filter((j) => isApmTitle(j.title))
+    .filter((j) => matchesApmTitle(j.title, c))
     .map((j) => ({
       id: `${c.slug}-${j.id}`,
       title: j.title,
@@ -493,7 +531,7 @@ export async function fetchDisney(c: CompanyConfig): Promise<NormalizedJob[]> {
     if (seenIds.has(row.id)) continue;
     seenIds.add(row.id);
     const title = row.rawTitle.replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
-    if (!isApmTitle(title)) continue;
+    if (!matchesApmTitle(title, c)) continue;
     const location = row.rawLocation.replace(/\s+/g, " ").trim();
     const posted = new Date(row.postedRaw.replace(".", ""));
     jobs.push({
@@ -602,7 +640,7 @@ async function fetchWalmartCareers(c: CompanyConfig, brand: string): Promise<Nor
   }
 
   return brandJobs
-    .filter((j) => j.jobPostingTitle && isApmTitle(j.jobPostingTitle))
+    .filter((j) => j.jobPostingTitle && matchesApmTitle(j.jobPostingTitle, c))
     .map((j) => ({
       id: `${c.slug}-${j.job_id}`,
       title: j.jobPostingTitle,
@@ -687,6 +725,48 @@ export async function probeWalmartQueryId(): Promise<void> {
   }
 }
 
+/**
+ * Jane Street's open-roles page is server-rendered from a plain JSON feed —
+ * no auth, no per-company/keyword filter server-side: GET
+ * https://www.janestreet.com/jobs/main.json returns every open posting.
+ *
+ * Internship exclusion quirk: Jane Street's `position` title text does NOT
+ * distinguish internships from full-time roles — e.g. "Strategy and Product"
+ * is used for both a Summer Internship and (via "Strategy and Product
+ * Specialist") the full-time role. The internship signal instead lives in
+ * the separate `availability` field ("Summer Internship" vs "Full-Time:
+ * Experienced"/"Full-Time: New Grad"), so this fetcher filters on that field
+ * rather than relying on isInternshipTitle/isApmTitle's title-only internship
+ * check to catch Jane Street's internships.
+ */
+export async function fetchJaneStreet(c: CompanyConfig): Promise<NormalizedJob[]> {
+  const data = (await fetchJson("https://www.janestreet.com/jobs/main.json")) as Array<{
+    id: number;
+    position: string;
+    availability?: string;
+    city?: string;
+  }>;
+  if (!Array.isArray(data)) {
+    throw new Error(
+      `fetchJaneStreet: response is not an array — got ${data === null ? "null" : typeof data}. ` +
+        `The janestreet.com/jobs/main.json feed shape may have changed.`,
+    );
+  }
+  return data
+    .filter((j) => j.position && (j.availability ?? "").toLowerCase().startsWith("full-time"))
+    .filter((j) => matchesApmTitle(j.position, c))
+    .map((j) => ({
+      id: `${c.slug}-${j.id}`,
+      title: j.position,
+      company: c.name,
+      companySlug: c.slug,
+      location: j.city ?? "Unspecified",
+      applyUrl: `https://www.janestreet.com/join-jane-street/position/${j.id}/`,
+      source: "janestreet",
+      postedOn: null,
+    }));
+}
+
 export const FEED_UNAVAILABLE = Symbol("FEED_UNAVAILABLE");
 
 export async function fetchForCompany(
@@ -715,6 +795,7 @@ export async function fetchForCompany(
       if (c.slug === "walmart") return fetchWalmart(c);
       if (c.slug === "vizio") return fetchVizio(c);
       if (c.slug === "disney") return fetchDisney(c);
+      if (c.slug === "janestreet") return fetchJaneStreet(c);
       throw new Error(`No fetcher for ${c.slug}`);
   }
 }

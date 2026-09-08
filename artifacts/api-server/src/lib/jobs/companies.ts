@@ -14,6 +14,15 @@ export interface CompanyConfig {
   feedUnavailable?: true;
   /** Careers/job-search page to link to when there's no fetchable feed, so the user can check manually. */
   careersUrl?: string;
+  /**
+   * Layer 2 of title matching (see matchesApmTitle in fetchers.ts): literal,
+   * case-insensitive substrings that always count as an APM/PM match for
+   * this company specifically, regardless of the generic isApmTitle rule.
+   * For companies whose real posting title doesn't share wording with the
+   * generic qualifier-word pattern (e.g. Jane Street's "Strategy and
+   * Product", Figma's "Early Career"). Extend by adding a string here.
+   */
+  titleAliases?: string[];
   /** Greenhouse/Lever board slug */
   boardSlug?: string;
   /** Ashby job board name, e.g. "Perplexity" in https://api.ashbyhq.com/posting-api/job-board/Perplexity */
@@ -51,14 +60,14 @@ export interface CompanyConfig {
 
 export const COMPANIES: CompanyConfig[] = [
   // Greenhouse
-  { name: "LinkedIn", slug: "linkedin", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "linkedin" },
+  { name: "LinkedIn", slug: "linkedin", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "linkedin", titleAliases: ["Associate Product Builder"] },
   { name: "Lyft", slug: "lyft", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "lyft" },
   { name: "Coinbase", slug: "coinbase", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "coinbase" },
   { name: "Instacart", slug: "instacart", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "instacart" },
   { name: "HubSpot", slug: "hubspot", ats: "greenhouse", programName: "RPM Program", programStatus: "active", boardSlug: "hubspotjobs" },
   { name: "Block", slug: "block", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "block" },
   // Lever
-  { name: "Spotify", slug: "spotify", ats: "lever", programName: "APM Program", programStatus: "active", boardSlug: "spotify" },
+  { name: "Spotify", slug: "spotify", ats: "lever", programName: "APM Program", programStatus: "active", boardSlug: "spotify", titleAliases: ["Junior Product Manager"] },
   // Plaid migrated off Lever to Ashby (confirmed live via the ATS link on an
   // individual plaid.com/careers/openings/... page, which points at
   // ashbyhq.com/plaid) — re-verified live 2026-09-01, 102 postings, board
@@ -67,7 +76,7 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Warner Music Group", slug: "wmg", ats: "lever", programName: "APM Program", programStatus: "active", boardSlug: "wmg" },
   // Workday
   // metacareers.com uses a private Relay/GraphQL endpoint that blocks server-side requests
-  { name: "Meta", slug: "meta", ats: "custom", programName: "RPM Program", programStatus: "active", feedUnavailable: true, careersUrl: "https://www.metacareers.com/jobs" },
+  { name: "Meta", slug: "meta", ats: "custom", programName: "RPM Program", programStatus: "active", feedUnavailable: true, careersUrl: "https://www.metacareers.com/jobs", titleAliases: ["Rotational Product Manager"] },
   { name: "Salesforce", slug: "salesforce", ats: "workday", programName: "APM Program", programStatus: "active", workday: { host: "salesforce.wd12.myworkdayjobs.com", company: "salesforce", tenant: "External_Career_Site" } },
   // Visa APM Program confirmed closed: SmartRecruiters board returns 200 with
   // totalFound: 0 (the whole company posting list is empty, not just no APM
@@ -107,7 +116,7 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Atlassian", slug: "atlassian", ats: "custom", programName: "APM Program", programStatus: "active" },
   // shopify.com/careers is a custom client-rendered app (pre-hydration monitor
   // scripts); no discoverable JSON API in page source or via network capture attempts.
-  { name: "Shopify", slug: "shopify", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true, careersUrl: "https://www.shopify.com/careers/search?q=product+manager" },
+  { name: "Shopify", slug: "shopify", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true, careersUrl: "https://www.shopify.com/careers/search?q=product+manager", titleAliases: ["Apprentice Product Manager"] },
   // zynga.com/careers redirects to a WordPress marketing page (wp-json oembed only,
   // no job search); real application flow (if any) isn't exposed on this domain.
   { name: "Zynga", slug: "zynga", ats: "custom", programName: "APM Program", programStatus: "active", feedUnavailable: true, careersUrl: "https://www.zynga.com/job-listing/?department=product-management" },
@@ -160,7 +169,7 @@ export const COMPANIES: CompanyConfig[] = [
       titleMatch: /chase associate program|innovation development program|commercial banking innovation/i } },
   // Batch 3 additions — Greenhouse boards confirmed live
   { name: "Samsara", slug: "samsara", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "samsara" },
-  { name: "Figma", slug: "figma", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "figma" },
+  { name: "Figma", slug: "figma", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "figma", titleAliases: ["Early Career"] },
   // StubHub — token is "stubhubinc", not "stubhub" (404s). Careers page is EU-hosted
   // (job-boards.eu.greenhouse.io/stubhubinc) but the standard boards-api.greenhouse.io
   // host still returns 200 with real data for this token; no host override needed.
@@ -217,7 +226,7 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Asana", slug: "asana", ats: "greenhouse", programName: "APM Program", programStatus: "active", boardSlug: "asana" },
   { name: "Arcade AI", slug: "arcade-ai", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "arcade-ai" },
   { name: "Sierra AI", slug: "sierra-ai", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "Sierra" },
-  { name: "Kleiner Perkins Fellows", slug: "kp-fellows", ats: "ashby", programName: "Fellows Program", programStatus: "active", ashbyBoardName: "KleinerPerkinsFellows" },
+  { name: "Kleiner Perkins Fellows", slug: "kp-fellows", ats: "ashby", programName: "Fellows Program", programStatus: "active", ashbyBoardName: "KleinerPerkinsFellows", titleAliases: ["Product Fellow"] },
   // Red Hat — Workday tenant confirmed live: POST returns 200 with real postings
   // (company=redhat, tenant=jobs; not the more common "External"/"Careers" tenant names).
   { name: "Red Hat", slug: "redhat", ats: "workday", programName: "APM Program", programStatus: "active",
@@ -238,4 +247,36 @@ export const COMPANIES: CompanyConfig[] = [
   // so this override only widens the candidate pool, same PayPal-style pattern.
   { name: "Mastercard", slug: "mastercard", ats: "workday", programName: "APM Program", programStatus: "active",
     workday: { host: "mastercard.wd1.myworkdayjobs.com", company: "mastercard", tenant: "CorporateCareers", searchText: "associate product" } },
+  // Batch 7 additions — sourced from the two-layer title-matching request's
+  // explicit per-company alias list (companies not previously tracked).
+  // Palo Alto Networks — Workday tenant found via a live careers-page fetch
+  // (jobs.paloaltonetworks.com references paloaltonetworks.wd5.myworkdayjobs.com
+  // directly). Confirmed live 2026-09-08: POST returns 200 with real postings.
+  // Default searchText widened to "product management" so an "Academy" cohort
+  // posting (not literally "associate product manager") would surface in the
+  // candidate pool; 0 current Academy postings is a real seasonal gap, not a
+  // broken feed — the search itself returns hundreds of unrelated real jobs.
+  { name: "Palo Alto Networks", slug: "palo-alto-networks", ats: "workday", programName: "Product Management Academy", programStatus: "active",
+    workday: { host: "paloaltonetworks.wd5.myworkdayjobs.com", company: "paloaltonetworks", tenant: "panwexternalcareers", searchText: "product management" },
+    titleAliases: ["Product Management Academy"] },
+  // Experian — jobs.experian.com redirects to a SmartRecruiters-backed board
+  // (company identifier "Experian", confirmed via an apply-link on the live
+  // careers page). Confirmed live 2026-09-08: 450 total postings, real
+  // "Product Management"-titled roles present; 0 current "Xcelerator Rotation
+  // Program" postings is a real seasonal gap.
+  { name: "Experian", slug: "experian", ats: "smartrecruiters", programName: "Product Management Xcelerator Rotation Program", programStatus: "active",
+    boardSlug: "Experian", titleAliases: ["Product Management Xcelerator Rotation Program"] },
+  // Jane Street — join-jane-street/open-roles page is server-rendered from a
+  // plain JSON feed (www.janestreet.com/jobs/main.json, no auth), found by
+  // fetching the page's own open_positions JS bundle and grep'ing for a
+  // ".json" reference. Confirmed live 2026-09-08 (232 total postings). Custom
+  // fetcher (fetchJaneStreet) is required, not the generic ones, because the
+  // feed has no company/keyword filter server-side and — notably — an
+  // internship posting there is NOT distinguishable by title text alone (e.g.
+  // "Strategy and Product" is used for both the internship and full-time
+  // role); the internship signal lives in a separate `availability` field
+  // ("Summer Internship" vs "Full-Time: Experienced"), which the fetcher
+  // checks instead of relying on isInternshipTitle for this company.
+  { name: "Jane Street", slug: "janestreet", ats: "custom", programName: "Strategy and Product", programStatus: "active",
+    titleAliases: ["Strategy and Product"] },
 ];

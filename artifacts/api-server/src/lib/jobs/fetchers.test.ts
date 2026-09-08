@@ -10,8 +10,10 @@ import {
   fetchGreenhouse,
   fetchWorkday,
   fetchOracle,
+  fetchJaneStreet,
   isApmTitle,
   isInternshipTitle,
+  matchesApmTitle,
   probeWalmartQueryId,
   WALMART_CAREERS_QUERY_ID,
 } from "./fetchers.js";
@@ -74,8 +76,81 @@ describe("isApmTitle — true positives", () => {
     ["new grad product manager", "Product Manager, New Grad"],
     ["new grad prefix", "New Grad - Program Manager"],
     ["new-grad hyphenated", "Program Manager (New-Grad)"],
+    // Layer 1 broadening, 2026-09-08 — "product"/"program" co-occurring
+    // anywhere in the title with a qualifier word, no adjacency required.
+    ["entry level product manager", "Entry Level Product Manager"],
+    ["entry-level hyphenated", "Entry-Level Product Manager"],
+    ["recent graduate", "Product Manager – Recent Graduate"],
+    ["university graduate", "University Graduate Product Manager"],
+    ["campus qualifier", "Campus Product Manager Program"],
+    ["early career qualifier", "Early Career Program Manager"],
+    ["junior qualifier", "Junior Product Manager"],
+    ["apprentice qualifier", "Apprentice Product Manager"],
+    ["fellow qualifier", "Product Fellow"],
+    ["academy qualifier", "Product Management Academy"],
+    ["xcelerator qualifier", "Product Management Xcelerator Rotation Program"],
+    ["builder qualifier", "Associate Product Builder"],
+    ["graduate program qualifier", "Product Manager, Graduate Program"],
+    ["new grad with other qualifying words", "Technical Product Manager – New Grad"],
+    // Widened scope, no longer excluded by the old adjacency requirement —
+    // "associate"/"product" both appear in the title, just not adjacent. This
+    // is a known, user-accepted trade-off (see
+    // .agents/memory/apm-title-matching-scope.md): it also means titles like
+    // "Associate Director of Product Marketing" now match even though they
+    // aren't APM roles — flagged to the user rather than silently narrowed.
+    ["associate not adjacent to product (now matches)", "Senior Associate, Product Management"],
+    ["associate director of product marketing (now matches, false-positive risk)", "Associate Director of Product Marketing"],
   ])("matches: %s → %s", (_label, title) => {
     expect(isApmTitle(title)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// matchesApmTitle — Layer 2 (per-company alias list)
+// ---------------------------------------------------------------------------
+
+describe("matchesApmTitle — per-company alias list", () => {
+  const withAliases = (titleAliases: string[]): CompanyConfig => ({
+    name: "Test Co",
+    slug: "testco",
+    ats: "custom",
+    programName: "Test Program",
+    programStatus: "active",
+    titleAliases,
+  });
+
+  it("matches a title via a company alias even though it fails the generic rule", () => {
+    // "Strategy and Product" has no qualifier word — only the alias catches it.
+    expect(matchesApmTitle("Strategy and Product", withAliases(["Strategy and Product"]))).toBe(true);
+  });
+
+  it("matches a company alias case-insensitively", () => {
+    expect(matchesApmTitle("strategy and product specialist", withAliases(["Strategy and Product"]))).toBe(true);
+  });
+
+  it("matches 'Early Career' via alias even though it has no product/program token", () => {
+    expect(matchesApmTitle("Early Career Software Engineer", withAliases(["Early Career"]))).toBe(true);
+  });
+
+  it("still excludes an internship title even when it contains an alias substring", () => {
+    expect(matchesApmTitle("Strategy and Product Intern", withAliases(["Strategy and Product"]))).toBe(false);
+  });
+
+  it("falls back to the generic isApmTitle rule when no alias matches", () => {
+    expect(matchesApmTitle("Associate Product Manager", withAliases(["Strategy and Product"]))).toBe(true);
+    expect(matchesApmTitle("Senior Software Engineer", withAliases(["Strategy and Product"]))).toBe(false);
+  });
+
+  it("works with no titleAliases configured at all", () => {
+    const noAliasCompany: CompanyConfig = {
+      name: "Test Co",
+      slug: "testco",
+      ats: "custom",
+      programName: "Test Program",
+      programStatus: "active",
+    };
+    expect(matchesApmTitle("Associate Product Manager", noAliasCompany)).toBe(true);
+    expect(matchesApmTitle("Random Title", noAliasCompany)).toBe(false);
   });
 });
 
@@ -100,16 +175,15 @@ describe("isApmTitle — true negatives", () => {
     ["bare program manager not scoped as entry-level", "Program Manager"],
     ["senior program manager not entry-level", "Senior Program Manager, Launch Operations"],
     ["program manager intern excluded", "Associate Program Manager Intern"],
-    // Mastercard-driven broadening negatives, 2026-09-08 — comma breaks the
-    // "Associate"/"Rotational" adjacency requirement, so senior/unrelated
-    // "Associate ___" titles that aren't directly product/program don't match.
-    ["senior associate not adjacent to product", "Senior Associate, Product Management"],
+    // "Associate General Counsel" has no "product"/"program" token at all, so
+    // it's excluded regardless of the Layer 1 broadening below.
     ["associate general counsel unrelated", "Associate General Counsel"],
-    ["associate director of product marketing", "Associate Director of Product Marketing"],
     ["bare product manager without new grad or associate", "Product Manager"],
     ["senior product manager not entry-level", "Senior Product Manager"],
     ["new grad specialist intern excluded", "New Grad Product Manager Intern"],
     ["graduate program without product/program keyword", "New Grad Software Engineer"],
+    // Internship exclusion still applies under the Layer 1 broadening.
+    ["rotational + product but internship", "Rotational Product Manager Intern"],
   ])("rejects: %s → %s", (_label, title) => {
     expect(isApmTitle(title)).toBe(false);
   });
@@ -632,6 +706,55 @@ const intuitConfig: CompanyConfig = {
   programName: "Intuit APM",
   programStatus: "active",
 };
+
+// ---------------------------------------------------------------------------
+// fetchJaneStreet — availability-field internship filtering
+// ---------------------------------------------------------------------------
+
+const janeStreetConfig: CompanyConfig = {
+  name: "Jane Street",
+  slug: "janestreet",
+  ats: "custom",
+  programName: "Strategy and Product",
+  programStatus: "active",
+  titleAliases: ["Strategy and Product"],
+};
+
+const JANE_STREET_JOBS = [
+  // Full-time "Strategy and Product" role — title alone doesn't say "product
+  // manager", matched via the company alias.
+  { id: 8056116002, position: "Strategy and Product Specialist", availability: "Full-Time: Experienced", city: "NYC" },
+  // Same title text, but a Summer Internship — must be excluded via the
+  // `availability` field since the title itself has no "intern" wording.
+  { id: 8630713002, position: "Strategy and Product", availability: "Summer Internship", city: "HKG" },
+  // Unrelated full-time role — excluded by matchesApmTitle.
+  { id: 5108180002, position: "Production Engineer", availability: "Full-Time: Experienced", city: "NYC" },
+];
+
+describe("fetchJaneStreet — availability-field internship filtering", () => {
+  it("includes the full-time 'Strategy and Product' role", async () => {
+    stubFetch(JANE_STREET_JOBS);
+    const jobs = await fetchJaneStreet(janeStreetConfig);
+    expect(jobs.some((j) => j.title === "Strategy and Product Specialist")).toBe(true);
+  });
+
+  it("excludes the Summer Internship posting with the identical title text", async () => {
+    stubFetch(JANE_STREET_JOBS);
+    const jobs = await fetchJaneStreet(janeStreetConfig);
+    expect(jobs.some((j) => j.id === "janestreet-8630713002")).toBe(false);
+  });
+
+  it("excludes unrelated full-time roles", async () => {
+    stubFetch(JANE_STREET_JOBS);
+    const jobs = await fetchJaneStreet(janeStreetConfig);
+    expect(jobs.some((j) => j.title === "Production Engineer")).toBe(false);
+  });
+
+  it("throws when the response is not an array", async () => {
+    stubFetch({ not: "an array" });
+    await expect(fetchJaneStreet(janeStreetConfig)).rejects.toThrow(/not an array/i);
+  });
+});
 
 describe("fetchIntuit — HTML parser (regression / silent-zero prevention)", () => {
   it("parses at least one APM job card from a fixture matching the current regex", async () => {
