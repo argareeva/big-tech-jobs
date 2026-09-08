@@ -1,0 +1,11 @@
+Update the job matching/filtering logic so the tracker stops missing full-time APM/PM new-grad postings due to inconsistent job titles across companies, and make sure internships are excluded entirely (only full-time roles should be tracked).
+
+The core problem: many companies don't use the literal phrase 'Associate Product Manager' or even 'Product Manager' in their full-time entry-level posting titles. Replace any single keyword match (like checking if the title contains 'product manager') with a two-layer matching system:
+
+Layer 1 — Broad pattern match: Flag a posting as a candidate if the title contains 'Product Manager' or 'Product' AND also contains one of these qualifier words: Associate, New Grad, Entry Level, Entry-Level, Recent Graduate, University Graduate, Campus, Rotational, Early Career, Junior, Apprentice, Fellow, Academy, Xcelerator, Builder, Graduate Program. This catches variants like 'Rotational Product Manager,' 'Product Manager – Recent Graduate,' 'Entry Level Product Manager,' 'Technical Product Manager – New College Grad,' and similar.
+
+Layer 2 — Company-specific alias list: For companies whose titles don't contain 'Product Manager' at all, maintain a manual per-company alias so they're always caught regardless of keyword match. Include at minimum: Jane Street → 'Strategy and Product', LinkedIn → 'Associate Product Builder', Figma → 'Early Career', Shopify → 'Apprentice Product Manager', Kleiner Perkins → 'Product Fellow', Palo Alto Networks → 'Product Management Academy', Experian → 'Product Management Xcelerator Rotation Program', Meta → 'Rotational Product Manager', Spotify → 'Junior Product Manager'. Make this alias list easy to extend later since more companies will likely need custom entries.
+
+Exclusion rule: Regardless of which layer matches, exclude any posting whose title contains 'Intern' or 'Internship' — I only want full-time roles, not internships or co-ops.
+
+Also update the scheduled scraper/digest to re-run the same matching logic, not just the initial ATS pull, so postings that get retitled after they first appear aren't dropped. Show me a summary of which companies now have alias entries so I can review and add more if needed."
