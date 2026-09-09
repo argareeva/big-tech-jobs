@@ -25,4 +25,6 @@ export interface Job {
   postedOn?: string | null;
   /** Whether the user has marked this exact posting as applied */
   applied: boolean;
+  /** Whether the user has marked this exact posting as not interested */
+  notInterested: boolean;
 }

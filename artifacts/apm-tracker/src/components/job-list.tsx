@@ -1,21 +1,25 @@
-import { ExternalLink, Check, Undo2 } from 'lucide-react';
+import { ExternalLink, Check, Undo2, X } from 'lucide-react';
 import type { Job } from '@workspace/api-client-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
+type JobListView = 'open' | 'applied' | 'not_interested';
+
 interface JobListProps {
   jobs: Job[];
   isLoading?: boolean;
-  showApplied?: boolean;
+  view?: JobListView;
   onToggleApplied?: (jobId: string, applied: boolean) => void;
+  onToggleNotInterested?: (jobId: string, notInterested: boolean) => void;
   isUpdatingJobId?: string;
 }
 
 export function JobList({
   jobs,
   isLoading,
-  showApplied,
+  view = 'open',
   onToggleApplied,
+  onToggleNotInterested,
   isUpdatingJobId,
 }: JobListProps) {
   if (isLoading) {
@@ -39,12 +43,18 @@ export function JobList({
           <div className="w-8 h-8 border-2 border-muted-foreground/20 rounded-full" />
         </div>
         <h3 className="text-lg font-semibold mb-1">
-          {showApplied ? 'No applied jobs yet' : 'No positions found'}
+          {view === 'applied'
+            ? 'No applied jobs yet'
+            : view === 'not_interested'
+              ? 'No dismissed jobs'
+              : 'No positions found'}
         </h3>
         <p className="text-sm text-muted-foreground max-w-sm">
-          {showApplied
+          {view === 'applied'
             ? 'Mark a job as applied and it will show up here for you to check back on.'
-            : 'These programs open seasonally. Try adjusting your filters or check back later.'}
+            : view === 'not_interested'
+              ? "Jobs you mark as not interested will show up here so you can undo it later."
+              : 'These programs open seasonally. Try adjusting your filters or check back later.'}
         </p>
       </div>
     );
@@ -75,6 +85,15 @@ export function JobList({
                 {job.applied && (
                   <Badge className="flex-shrink-0 text-xs" data-testid={`badge-applied-${job.id}`}>
                     Applied
+                  </Badge>
+                )}
+                {job.notInterested && (
+                  <Badge
+                    variant="secondary"
+                    className="flex-shrink-0 text-xs"
+                    data-testid={`badge-not-interested-${job.id}`}
+                  >
+                    Not Interested
                   </Badge>
                 )}
               </div>
@@ -109,6 +128,24 @@ export function JobList({
                   <Check className="w-3.5 h-3.5" />
                 )}
                 {job.applied ? 'Undo' : 'Applied'}
+              </Button>
+            )}
+            {onToggleNotInterested && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex-shrink-0 gap-1.5"
+                disabled={isUpdating}
+                onClick={() => onToggleNotInterested(job.id, !job.notInterested)}
+                data-testid={`button-toggle-not-interested-${job.id}`}
+              >
+                {job.notInterested ? (
+                  <Undo2 className="w-3.5 h-3.5" />
+                ) : (
+                  <X className="w-3.5 h-3.5" />
+                )}
+                {job.notInterested ? 'Undo' : 'Not Interested'}
               </Button>
             )}
           </div>

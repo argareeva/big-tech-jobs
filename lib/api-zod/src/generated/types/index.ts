@@ -17,3 +17,5 @@ export * from './refreshResult';
 export * from './refreshResultErrorsItem';
 export * from './setAppliedRequest';
 export * from './setAppliedResponse';
+export * from './setNotInterestedRequest';
+export * from './setNotInterestedResponse';

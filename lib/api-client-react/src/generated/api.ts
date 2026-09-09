@@ -28,7 +28,9 @@ import type {
   ListJobsParams,
   RefreshResult,
   SetAppliedRequest,
-  SetAppliedResponse
+  SetAppliedResponse,
+  SetNotInterestedRequest,
+  SetNotInterestedResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -289,6 +291,77 @@ export const useSetJobApplied = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getSetJobAppliedMutationOptions(options));
+    }
+
+export const getSetJobNotInterestedUrl = () => {
+
+
+
+
+  return `/api/jobs/not-interested`
+}
+
+/**
+ * @summary Mark or unmark a specific job posting as not interested
+ */
+export const setJobNotInterested = async (setNotInterestedRequest: SetNotInterestedRequest, options?: Parameters<typeof customFetch>[1]): Promise<SetNotInterestedResponse> => {
+
+  return customFetch<SetNotInterestedResponse>(getSetJobNotInterestedUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setNotInterestedRequest)
+  }
+);}
+
+
+
+
+
+export const getSetJobNotInterestedMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setJobNotInterested>>, TError,{data: BodyType<SetNotInterestedRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setJobNotInterested>>, TError,{data: BodyType<SetNotInterestedRequest>}, TContext> => {
+
+const mutationKey = ['setJobNotInterested'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setJobNotInterested>>, {data: BodyType<SetNotInterestedRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  setJobNotInterested(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetJobNotInterestedMutationResult = NonNullable<Awaited<ReturnType<typeof setJobNotInterested>>>
+    export type SetJobNotInterestedMutationBody = BodyType<SetNotInterestedRequest>
+    export type SetJobNotInterestedMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark or unmark a specific job posting as not interested
+ */
+export const useSetJobNotInterested = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setJobNotInterested>>, TError,{data: BodyType<SetNotInterestedRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setJobNotInterested>>,
+        TError,
+        {data: BodyType<SetNotInterestedRequest>},
+        TContext
+      > => {
+      return useMutation(getSetJobNotInterestedMutationOptions(options));
     }
 
 export const getRefreshJobsUrl = () => {

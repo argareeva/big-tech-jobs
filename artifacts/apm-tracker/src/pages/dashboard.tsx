@@ -7,6 +7,7 @@ import {
   useRefreshJobs,
   useSendDigest,
   useSetJobApplied,
+  useSetJobNotInterested,
   getListJobsQueryKey,
   getListCompaniesQueryKey,
   getGetJobStatsQueryKey,
@@ -19,17 +20,19 @@ import { StatsBar } from '@/components/stats-bar';
 import { CompanyGrid } from '@/components/company-grid';
 import { useToast } from '@/hooks/use-toast';
 
+type JobView = 'open' | 'applied' | 'not_interested';
+
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
-  const [showApplied, setShowApplied] = useState(false);
+  const [view, setView] = useState<JobView>('open');
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const { data: jobs, isLoading: jobsLoading } = useListJobs({
     ...(selectedCompany ? { company: selectedCompany } : {}),
     ...(searchQuery ? { q: searchQuery } : {}),
-    status: showApplied ? 'applied' : 'open',
+    status: view,
   });
 
   const { data: companies, isLoading: companiesLoading } = useListCompanies();
@@ -65,6 +68,32 @@ export default function Dashboard() {
 
   const handleToggleApplied = (jobId: string, applied: boolean) => {
     setAppliedMutation.mutate({ data: { jobId, applied } });
+  };
+
+  const setNotInterestedMutation = useSetJobNotInterested({
+    mutation: {
+      onSuccess: (_result, variables) => {
+        invalidateJobData();
+        const notInterested = variables.data.notInterested;
+        toast({
+          title: notInterested ? 'Marked as not interested' : 'Moved back to open',
+          description: notInterested
+            ? 'Tucked under "Not Interested" whenever you want to check back.'
+            : 'This posting is back in your open positions.',
+        });
+      },
+      onError: () => {
+        toast({
+          title: 'Could not update that job',
+          description: 'Please try again.',
+          variant: 'destructive',
+        });
+      },
+    },
+  });
+
+  const handleToggleNotInterested = (jobId: string, notInterested: boolean) => {
+    setNotInterestedMutation.mutate({ data: { jobId, notInterested } });
   };
 
   const digestMutation = useSendDigest({
@@ -201,9 +230,9 @@ export default function Dashboard() {
           <div className="flex items-center gap-2 mb-4 border-b border-border">
             <button
               type="button"
-              onClick={() => setShowApplied(false)}
+              onClick={() => setView('open')}
               className={`px-1 pb-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                !showApplied
+                view === 'open'
                   ? 'border-primary text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
@@ -213,15 +242,27 @@ export default function Dashboard() {
             </button>
             <button
               type="button"
-              onClick={() => setShowApplied(true)}
+              onClick={() => setView('applied')}
               className={`px-1 pb-2 ml-4 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                showApplied
+                view === 'applied'
                   ? 'border-primary text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
               data-testid="tab-show-applied"
             >
               Show Applied{stats?.appliedJobs ? ` (${stats.appliedJobs})` : ''}
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('not_interested')}
+              className={`px-1 pb-2 ml-4 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                view === 'not_interested'
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+              data-testid="tab-show-not-interested"
+            >
+              Not Interested{stats?.notInterestedJobs ? ` (${stats.notInterestedJobs})` : ''}
             </button>
           </div>
 
@@ -252,10 +293,16 @@ export default function Dashboard() {
           <JobList
             jobs={displayedJobs}
             isLoading={jobsLoading}
-            showApplied={showApplied}
+            view={view}
             onToggleApplied={handleToggleApplied}
+            onToggleNotInterested={handleToggleNotInterested}
             isUpdatingJobId={
-              setAppliedMutation.isPending ? setAppliedMutation.variables?.data.jobId : undefined
+              (setAppliedMutation.isPending
+                ? setAppliedMutation.variables?.data.jobId
+                : undefined) ??
+              (setNotInterestedMutation.isPending
+                ? setNotInterestedMutation.variables?.data.jobId
+                : undefined)
             }
           />
         </div>

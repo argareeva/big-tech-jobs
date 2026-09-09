@@ -17,7 +17,7 @@ company?: string;
  */
 q?: string;
 /**
- * Filter by applied status. "open" (default) excludes jobs marked applied, "applied" returns only jobs marked applied, "all" returns everything.
+ * Filter by status. "open" (default) excludes jobs marked applied or not interested, "applied" returns only jobs marked applied, "not_interested" returns only jobs marked not interested, "all" returns everything.
  */
 status?: ListJobsStatus;
 };

@@ -28,6 +28,8 @@ export interface Job {
   postedOn?: string | null;
   /** Whether the user has marked this exact posting as applied */
   applied: boolean;
+  /** Whether the user has marked this exact posting as not interested */
+  notInterested: boolean;
 }
 
 export interface Company {
@@ -90,6 +92,8 @@ export interface JobStats {
   lastRefreshAt: string | null;
   /** Running count of every job ever marked as applied */
   appliedJobs: number;
+  /** Running count of every job ever marked as not interested */
+  notInterestedJobs: number;
 }
 
 export interface SetAppliedRequest {
@@ -103,6 +107,17 @@ export interface SetAppliedResponse {
   applied: boolean;
 }
 
+export interface SetNotInterestedRequest {
+  /** The exact job id to mark/unmark (companySlug + external id) */
+  jobId: string;
+  notInterested: boolean;
+}
+
+export interface SetNotInterestedResponse {
+  jobId: string;
+  notInterested: boolean;
+}
+
 export type ListJobsParams = {
 /**
  * Filter by company slug
@@ -113,7 +128,7 @@ company?: string;
  */
 q?: string;
 /**
- * Filter by applied status. "open" (default) excludes jobs marked applied, "applied" returns only jobs marked applied, "all" returns everything.
+ * Filter by status. "open" (default) excludes jobs marked applied or not interested, "applied" returns only jobs marked applied, "not_interested" returns only jobs marked not interested, "all" returns everything.
  */
 status?: ListJobsStatus;
 };
@@ -124,6 +139,7 @@ export type ListJobsStatus = typeof ListJobsStatus[keyof typeof ListJobsStatus];
 export const ListJobsStatus = {
   open: 'open',
   applied: 'applied',
+  not_interested: 'not_interested',
   all: 'all',
 } as const;
 

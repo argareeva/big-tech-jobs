@@ -12,5 +12,6 @@ export type ListJobsStatus = typeof ListJobsStatus[keyof typeof ListJobsStatus];
 export const ListJobsStatus = {
   open: 'open',
   applied: 'applied',
+  not_interested: 'not_interested',
   all: 'all',
 } as const;

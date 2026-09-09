@@ -25,7 +25,7 @@ export const listJobsQueryStatusDefault = `open`;
 export const ListJobsQueryParams = zod.object({
   "company": zod.coerce.string().optional().describe('Filter by company slug'),
   "q": zod.coerce.string().optional().describe('Keyword filter on job title'),
-  "status": zod.enum(['open', 'applied', 'all']).default(listJobsQueryStatusDefault).describe('Filter by applied status. \"open\" (default) excludes jobs marked applied, \"applied\" returns only jobs marked applied, \"all\" returns everything.\n')
+  "status": zod.enum(['open', 'applied', 'not_interested', 'all']).default(listJobsQueryStatusDefault).describe('Filter by status. \"open\" (default) excludes jobs marked applied or not interested, \"applied\" returns only jobs marked applied, \"not_interested\" returns only jobs marked not interested, \"all\" returns everything.\n')
 })
 
 export const ListJobsResponseItem = zod.object({
@@ -37,7 +37,8 @@ export const ListJobsResponseItem = zod.object({
   "applyUrl": zod.string(),
   "source": zod.string().describe('ATS source (greenhouse, lever, workday, google, uber)'),
   "postedOn": zod.string().nullish().describe('Posting date text if available'),
-  "applied": zod.boolean().describe('Whether the user has marked this exact posting as applied')
+  "applied": zod.boolean().describe('Whether the user has marked this exact posting as applied'),
+  "notInterested": zod.boolean().describe('Whether the user has marked this exact posting as not interested')
 })
 export const ListJobsResponse = zod.array(ListJobsResponseItem)
 
@@ -53,6 +54,20 @@ export const SetJobAppliedBody = zod.object({
 export const SetJobAppliedResponse = zod.object({
   "jobId": zod.string(),
   "applied": zod.boolean()
+})
+
+
+/**
+ * @summary Mark or unmark a specific job posting as not interested
+ */
+export const SetJobNotInterestedBody = zod.object({
+  "jobId": zod.string().describe('The exact job id to mark\/unmark (companySlug + external id)'),
+  "notInterested": zod.boolean()
+})
+
+export const SetJobNotInterestedResponse = zod.object({
+  "jobId": zod.string(),
+  "notInterested": zod.boolean()
 })
 
 
@@ -78,7 +93,8 @@ export const GetJobStatsResponse = zod.object({
   "companiesWithJobs": zod.number(),
   "totalCompanies": zod.number(),
   "lastRefreshAt": zod.string().nullable(),
-  "appliedJobs": zod.number().describe('Running count of every job ever marked as applied')
+  "appliedJobs": zod.number().describe('Running count of every job ever marked as applied'),
+  "notInterestedJobs": zod.number().describe('Running count of every job ever marked as not interested')
 })
 
 

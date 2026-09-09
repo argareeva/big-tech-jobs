@@ -14,4 +14,6 @@ export interface JobStats {
   lastRefreshAt: string | null;
   /** Running count of every job ever marked as applied */
   appliedJobs: number;
+  /** Running count of every job ever marked as not interested */
+  notInterestedJobs: number;
 }

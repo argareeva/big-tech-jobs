@@ -5,9 +5,15 @@ import {
   RefreshJobsResponse,
   GetJobStatsResponse,
   SetJobAppliedResponse,
+  SetJobNotInterestedResponse,
 } from "@workspace/api-zod";
 import { getJobs, getCompanies, getStats, refreshAll, hasData } from "../lib/jobs/store";
 import { getAppliedJobIds, getAppliedCount, setApplied } from "../lib/jobs/applied";
+import {
+  getNotInterestedJobIds,
+  getNotInterestedCount,
+  setNotInterested,
+} from "../lib/jobs/not-interested";
 import { sendDigest } from "../lib/email/send-digest";
 
 const router: IRouter = Router();
@@ -16,13 +22,24 @@ router.get("/jobs", async (req, res) => {
   if (!hasData()) await refreshAll(req.log);
   const { company, q, status } = req.query as { company?: string; q?: string; status?: string };
   const appliedIds = await getAppliedJobIds();
+  const notInterestedIds = await getNotInterestedJobIds();
   let all = getJobs({ company, q });
   if (status === "applied") {
     all = all.filter((j) => appliedIds.has(j.id));
+  } else if (status === "not_interested") {
+    all = all.filter((j) => notInterestedIds.has(j.id));
   } else if (status !== "all") {
-    all = all.filter((j) => !appliedIds.has(j.id));
+    all = all.filter((j) => !appliedIds.has(j.id) && !notInterestedIds.has(j.id));
   }
-  res.json(ListJobsResponse.parse(all.map((j) => ({ ...j, applied: appliedIds.has(j.id) }))));
+  res.json(
+    ListJobsResponse.parse(
+      all.map((j) => ({
+        ...j,
+        applied: appliedIds.has(j.id),
+        notInterested: notInterestedIds.has(j.id),
+      })),
+    ),
+  );
 });
 
 router.post("/jobs/applied", async (req, res) => {
@@ -35,6 +52,19 @@ router.post("/jobs/applied", async (req, res) => {
   res.json(SetJobAppliedResponse.parse({ jobId, applied }));
 });
 
+router.post("/jobs/not-interested", async (req, res) => {
+  const { jobId, notInterested } = (req.body ?? {}) as {
+    jobId?: unknown;
+    notInterested?: unknown;
+  };
+  if (typeof jobId !== "string" || !jobId || typeof notInterested !== "boolean") {
+    res.status(400).json({ error: "jobId (string) and notInterested (boolean) are required" });
+    return;
+  }
+  await setNotInterested(jobId, notInterested);
+  res.json(SetJobNotInterestedResponse.parse({ jobId, notInterested }));
+});
+
 router.post("/jobs/refresh", async (req, res) => {
   const summary = await refreshAll(req.log);
   res.json(RefreshJobsResponse.parse(summary));
@@ -42,16 +72,19 @@ router.post("/jobs/refresh", async (req, res) => {
 
 router.get("/jobs/stats", async (_req, res) => {
   const appliedIds = await getAppliedJobIds();
+  const notInterestedIds = await getNotInterestedJobIds();
   const allJobs = getJobs();
-  const openJobs = allJobs.filter((j) => !appliedIds.has(j.id));
+  const openJobs = allJobs.filter((j) => !appliedIds.has(j.id) && !notInterestedIds.has(j.id));
   const base = getStats();
   const appliedJobs = await getAppliedCount();
+  const notInterestedJobs = await getNotInterestedCount();
   res.json(
     GetJobStatsResponse.parse({
       ...base,
       totalJobs: openJobs.length,
       companiesWithJobs: new Set(openJobs.map((j) => j.companySlug)).size,
       appliedJobs,
+      notInterestedJobs,
     }),
   );
 });
