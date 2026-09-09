@@ -72,23 +72,51 @@ const QUALIFIER_WORD_RE = new RegExp(`\\b(?:${QUALIFIER_WORD_PATTERNS.join("|")}
 const SENIORITY_OR_MARKETING_EXCLUSION_RE =
   /\b(director|vp|vice[\s-]?president|chief|senior|marketing)\b/i;
 
+// Word-boundary check for "product"/"program" (and plurals) — NOT a plain
+// substring `.includes()`. A substring check incorrectly matches unrelated
+// words that happen to start with the same letters, e.g. "Production
+// Associate" (`"production".includes("product")` is true) or "Productivity
+// Program Manager" (`"productivity"` also contains "product"). `\b` after
+// "product"/"program" requires the next character NOT be a word character,
+// which correctly excludes "...ion"/"...ivity" continuations while still
+// matching "product", "products", "product,", "product-", "program",
+// "programs", etc. Found 2026-09-08 from a real false positive (IXL's
+// "Production Associate, Takeoff" was matching via the substring bug).
+const PRODUCT_OR_PROGRAM_RE = /\bproducts?\b|\bprograms?\b/i;
+
+// Roles this tracker should never surface even when they otherwise match the
+// product/program + qualifier-word pattern above — they're a different job
+// family than an APM/PM program, and slip through because their title
+// happens to co-occur "associate"/"program" with an unrelated department.
+// Added 2026-09-08 after real false positives were found live: Experian's
+// "Finance Graduate Associate Program", PNC's "Corporate & Institutional
+// Banking Development Program Analyst/Associate", "Finance Associate -
+// Retail Finance Deposit Products", and "Investment Manager - Product
+// Research Associate III" all matched Layer 1 despite being finance/banking
+// roles, not product management roles.
+const EXCLUDED_DOMAIN_RE =
+  /\b(investment(?:\s+bank(?:ing|er)?)?|banking|finance|financial|accounting|audit(?:or|ing)?|treasury|trading|underwrit(?:er|ing))\b/i;
+const EXCLUDED_ENGINEERING_RE =
+  /\b(software engineer|developer|programmer|swe|full[\s-]?stack|back[\s-]?end|front[\s-]?end|devops|data engineer|qa engineer|test engineer|site reliability)\b/i;
+
 export function isApmTitle(title: string): boolean {
   if (isInternshipTitle(title)) return false;
   const t = title.toLowerCase();
+  if (EXCLUDED_DOMAIN_RE.test(t) || EXCLUDED_ENGINEERING_RE.test(t)) return false;
 
   // Layer 1: broad pattern — "product"/"program" co-occurring anywhere in
   // the title with an entry-level/rotational qualifier word. Excludes
   // titles that also carry a seniority/leadership or marketing-department
   // word (see SENIORITY_OR_MARKETING_EXCLUSION_RE above) — those are false
   // positives from the broadened rule, not true entry-level PM programs.
-  if ((t.includes("product") || t.includes("program")) && QUALIFIER_WORD_RE.test(t)) {
+  if (PRODUCT_OR_PROGRAM_RE.test(t) && QUALIFIER_WORD_RE.test(t)) {
     return !SENIORITY_OR_MARKETING_EXCLUSION_RE.test(t);
   }
 
   // Titles that express the same entry-level-program intent without literally
   // containing "product"/"program" alongside one of the qualifier words above.
   if (t.includes("graduate business leadership")) return true; // PayPal GBLP
-  if (/\b(apm|rpm)\b/i.test(t) && (t.includes("product") || t.includes("program"))) return true;
+  if (/\b(apm|rpm)\b/i.test(t) && PRODUCT_OR_PROGRAM_RE.test(t)) return true;
 
   return false;
 }
@@ -789,10 +817,55 @@ export async function fetchJaneStreet(c: CompanyConfig): Promise<NormalizedJob[]
 
 export const FEED_UNAVAILABLE = Symbol("FEED_UNAVAILABLE");
 
-export async function fetchForCompany(
-  c: CompanyConfig,
-): Promise<NormalizedJob[] | typeof FEED_UNAVAILABLE> {
-  if (c.feedUnavailable) return FEED_UNAVAILABLE;
+// Location scope, added 2026-09-08 per user request: this tracker is
+// US-openings-only. ATS feeds report location in wildly inconsistent
+// formats (full "City, State", bare city names, country codes, ";"-joined
+// multi-office lists, or a "N Locations" placeholder with no actual text),
+// so this is a heuristic, not an exact geo lookup:
+//   - A ";"-separated location string counts as US if ANY segment looks US
+//     (a multi-office posting is relevant to a US applicant if one of the
+//     offices is in the US).
+//   - A segment is foreign if it names a non-US country/city/region — see
+//     NON_US_LOCATION_RE. This list is necessarily incomplete; extend it
+//     when a new foreign city/country slips through.
+//   - A segment is US if it names the US explicitly, a full US state name,
+//     a US state abbreviation adjacent to a comma/hyphen/parenthesis (not a
+//     bare 2-letter match, to avoid false hits from words like "in"/"or"),
+//     or "NYC"/"Remote" (Jane Street's own city-code shorthand, and a bare
+//     "Remote" with no further qualifier — most tracked companies are
+//     US-headquartered, so an unqualified "Remote" defaults to included).
+//   - Anything else uninformative (no location text, or a placeholder like
+//     "3 Locations") is kept rather than dropped — we can't confirm it's
+//     foreign, and silently hiding a real US posting is worse than
+//     occasionally showing one we can't verify.
+const NON_US_LOCATION_RE =
+  /\b(canada|toronto|vancouver|montreal|ottawa|united kingdom|\buk\b|london|manchester|edinburgh|ireland|dublin|germany|berlin|munich|frankfurt|france|paris|netherlands|amsterdam|spain|madrid|barcelona|italy|milan|rome|switzerland|zurich|geneva|poland|warsaw|krakow|ukraine|kyiv|sweden|stockholm|denmark|copenhagen|norway|oslo|finland|helsinki|portugal|lisbon|austria|vienna|belgium|brussels|india|bengaluru|bangalore|hyderabad|mumbai|pune|gurgaon|gurugram|noida|chennai|new delhi|japan|tokyo|osaka|china|beijing|shanghai|shenzhen|hong kong|hongkong|\bhkg\b|singapore|\bsgp\b|malaysia|kuala lumpur|cyberjaya|australia|sydney|melbourne|brisbane|new zealand|auckland|mexico city|guadalajara|monterrey|\bmx\b|brazil|sao paulo|são paulo|argentina|buenos aires|\bchile\b|santiago|colombia|bogota|bogotá|\bperu\b|\blima\b|costa rica|philippines|manila|vietnam|hanoi|ho chi minh|thailand|bangkok|indonesia|jakarta|israel|tel aviv|\buae\b|dubai|abu dhabi|saudi arabia|riyadh|\begypt\b|cairo|south africa|johannesburg|cape town|south korea|\bseoul\b|taiwan|taipei|romania|bucharest|czech|prague|hungary|budapest|\bemea\b|\bapac\b|\blatam\b|\bldn\b)\b/i;
+const US_STATE_ABBR_RE =
+  /(?:^|[,(-]\s*|\s-\s)(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
+const US_EXPLICIT_RE =
+  /\b(united states|usa|u\.s\.a?\.?|nyc)\b|\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming)\b/i;
+
+function isUsLocationSegment(segment: string): boolean {
+  const s = segment.trim();
+  if (!s) return true; // no text to judge — don't drop on missing data
+  if (NON_US_LOCATION_RE.test(s)) return false;
+  if (US_EXPLICIT_RE.test(s) || US_STATE_ABBR_RE.test(s)) return true;
+  if (/^\d+\s+locations?$/i.test(s)) return true; // "3 Locations" placeholder — can't verify, keep
+  if (/^remote$/i.test(s)) return true; // bare "Remote" with no country qualifier
+  // Bare city name we don't recognize as foreign and can't confirm as US
+  // either (e.g. "San Francisco" with no state suffix). Default to keep —
+  // over-hiding a real US posting is worse than an occasional unverifiable one.
+  return true;
+}
+
+export function isUsLocation(location: string): boolean {
+  if (!location) return true;
+  const segments = location.split(";").map((s) => s.trim()).filter(Boolean);
+  if (segments.length === 0) return true;
+  return segments.some(isUsLocationSegment);
+}
+
+async function dispatchFetch(c: CompanyConfig): Promise<NormalizedJob[]> {
   switch (c.ats) {
     case "greenhouse":
       return fetchGreenhouse(c);
@@ -818,4 +891,17 @@ export async function fetchForCompany(
       if (c.slug === "janestreet") return fetchJaneStreet(c);
       throw new Error(`No fetcher for ${c.slug}`);
   }
+}
+
+export async function fetchForCompany(
+  c: CompanyConfig,
+): Promise<NormalizedJob[] | typeof FEED_UNAVAILABLE> {
+  if (c.feedUnavailable) return FEED_UNAVAILABLE;
+  const jobs = await dispatchFetch(c);
+  // Central post-filter, applied after every ATS-specific fetcher and
+  // shared by both the live refresh and the scheduled digest (both call
+  // fetchForCompany) — location scope and the finance/banking/developer
+  // exclusion in isApmTitle are enforced in exactly one place rather than
+  // duplicated per fetcher.
+  return jobs.filter((j) => isUsLocation(j.location));
 }

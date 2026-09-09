@@ -14,6 +14,7 @@ import {
   isApmTitle,
   isInternshipTitle,
   matchesApmTitle,
+  isUsLocation,
   probeWalmartQueryId,
   WALMART_CAREERS_QUERY_ID,
 } from "./fetchers.js";
@@ -104,6 +105,34 @@ describe("isApmTitle — true positives", () => {
 });
 
 // ---------------------------------------------------------------------------
+// isUsLocation — US-only location scope
+// ---------------------------------------------------------------------------
+
+describe("isUsLocation", () => {
+  it.each([
+    ["plain state abbreviation", "San Francisco, CA", true],
+    ["full state name", "O'Fallon, Missouri", true],
+    ["United States literal", "San Mateo, CA, United States", true],
+    ["NYC shorthand", "NYC", true],
+    ["multi-office with one US segment", "Phoenix, AZ; Chicago, IL; San Francisco, CA; United States - Remote", true],
+    ["hyphenated state prefix", "PA - Pittsburgh (15222)", true],
+    ["bare Remote with no country qualifier", "Remote", true],
+    ["N Locations placeholder — can't verify, kept", "3 Locations", true],
+    ["unspecified — kept", "Unspecified", true],
+    ["empty string — kept", "", true],
+    ["foreign country name", "Dublin, Ireland", false],
+    ["foreign country code + city", "Cyberjaya, MY", false],
+    ["foreign city code shorthand", "SGP", false],
+    ["mexico city variant", "MX- Mexico City", false],
+    ["all-foreign multi-office", "Hong Kong, Hong Kong SAR; Singapore, Singapore", false],
+    ["bare foreign city with no country marker", "Bengaluru", false],
+    ["london", "London, UK", false],
+  ])("%s: %s → %s", (_label, location, expected) => {
+    expect(isUsLocation(location)).toBe(expected);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // matchesApmTitle — Layer 2 (per-company alias list)
 // ---------------------------------------------------------------------------
 
@@ -182,6 +211,24 @@ describe("isApmTitle — true negatives", () => {
     ["graduate program without product/program keyword", "New Grad Software Engineer"],
     // Internship exclusion still applies under the Layer 1 broadening.
     ["rotational + product but internship", "Rotational Product Manager Intern"],
+    // Substring bug fix, 2026-09-08 — "production"/"productivity" contain the
+    // letters "product" but are not the word "product"; a plain
+    // `.includes("product")` incorrectly matched these (found live via IXL's
+    // "Production Associate, Takeoff").
+    ["production is not product", "Production Associate, New Grad"],
+    ["productivity is not product", "Associate, Productivity Metrics Lead"],
+    // Finance/investment-banking exclusion, 2026-09-08 — found live via
+    // Experian's "Finance Graduate Associate Program" and PNC's banking/
+    // finance postings, which matched Layer 1 despite not being PM roles.
+    ["finance associate program excluded", "Finance Graduate Associate Program"],
+    ["investment banking excluded", "Investment Banking Development Program Associate"],
+    ["banking excluded", "Corporate & Institutional Banking Development Program Associate"],
+    ["trading excluded", "Associate, Trading Program"],
+    ["accounting excluded", "Accounting Associate Program"],
+    // Developer/engineering exclusion, 2026-09-08.
+    ["software engineer excluded", "Associate Software Engineer Program"],
+    ["developer excluded", "Associate Developer Program"],
+    ["devops excluded", "Junior DevOps Program"],
   ])("rejects: %s → %s", (_label, title) => {
     expect(isApmTitle(title)).toBe(false);
   });
