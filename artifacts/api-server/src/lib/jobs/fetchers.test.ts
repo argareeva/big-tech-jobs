@@ -15,6 +15,8 @@ import {
   isInternshipTitle,
   matchesApmTitle,
   isUsLocation,
+  extractMinYearsExperience,
+  isWithinExperienceCap,
   probeWalmartQueryId,
   WALMART_CAREERS_QUERY_ID,
 } from "./fetchers.js";
@@ -101,6 +103,39 @@ describe("isApmTitle — true positives", () => {
     ["associate not adjacent to product manager", "Associate, Product Manager"],
   ])("matches: %s → %s", (_label, title) => {
     expect(isApmTitle(title)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractMinYearsExperience / isWithinExperienceCap — early-career-only scope
+// ---------------------------------------------------------------------------
+
+describe("extractMinYearsExperience", () => {
+  it.each([
+    ["no mention", "We are looking for a passionate product thinker.", null],
+    ["plain N years", "3 years of experience in product management required.", 3],
+    ["N+ years", "5+ years of relevant experience needed.", 5],
+    ["range takes lower bound", "3-5 years of experience preferred.", 3],
+    ["range with 'to'", "2 to 4 years of work experience.", 2],
+    ["minimum phrasing", "Minimum of 6 years experience required.", 6],
+    ["at least phrasing", "At least 7 years of professional experience.", 7],
+    ["zero is a valid minimum", "0-2 years of experience welcome.", 0],
+    ["takes the lowest of multiple mentions", "5+ years experience, or 2 years experience with a master's degree.", 2],
+  ])("%s: %s → %s", (_label, text, expected) => {
+    expect(extractMinYearsExperience(text)).toBe(expected);
+  });
+});
+
+describe("isWithinExperienceCap", () => {
+  it.each([
+    ["no description", undefined, true],
+    ["no stated requirement", "Great communicator, product-minded.", true],
+    ["within cap", "2-4 years of experience required.", true],
+    ["exactly at cap", "4 years of experience required.", true],
+    ["over cap", "5+ years of experience required.", false],
+    ["well over cap", "Minimum of 8 years experience.", false],
+  ])("%s: %s → %s", (_label, text, expected) => {
+    expect(isWithinExperienceCap(text)).toBe(expected);
   });
 });
 

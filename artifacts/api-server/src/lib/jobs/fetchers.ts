@@ -138,6 +138,64 @@ export function matchesApmTitle(title: string, c: CompanyConfig): boolean {
   return isApmTitle(title);
 }
 
+// Experience cap, added 2026-09-08 per user request: "I only need early
+// career, don't show me more than 4 years of experience". A job title alone
+// rarely states a years-of-experience requirement, so this parses the full
+// job description text where the ATS's list endpoint already includes it
+// (Greenhouse's `content=true` param, Lever's `descriptionPlain`/`lists`
+// fields) — no extra per-job HTTP request needed for those two. Other ATS
+// list endpoints (Workday, SmartRecruiters, Ashby, Atlassian, Oracle,
+// Google, Microsoft, Intuit, Disney, Walmart family, Jane Street) don't
+// expose the full description in the same request, so this cap can't be
+// applied to them without adding a per-job fetch; those sources are left
+// unfiltered by experience (default keep — same "don't drop what we can't
+// verify" stance as the location filter).
+const EXPERIENCE_CAP_YEARS = 4;
+const YEARS_EXPERIENCE_PATTERNS: RegExp[] = [
+  /(\d+)\s*\+\s*years?\s*(?:of\s+)?(?:relevant\s+|related\s+|professional\s+|prior\s+|work\s+)?experience/g,
+  /(\d+)\s*[-–]\s*\d+\s*\+?\s*years?\s*(?:of\s+)?(?:relevant\s+|related\s+|professional\s+|prior\s+|work\s+)?experience/g,
+  /(\d+)\s*to\s*\d+\s*years?\s*(?:of\s+)?(?:relevant\s+|related\s+|professional\s+|prior\s+|work\s+)?experience/g,
+  /minimum\s+(?:of\s+)?(\d+)\s*years?\s*(?:of\s+)?experience/g,
+  /at\s+least\s+(\d+)\s*years?\s*(?:of\s+)?experience/g,
+  /(\d+)\s*years?\s*(?:of\s+)?(?:relevant\s+|related\s+|professional\s+|prior\s+|work\s+)?experience/g,
+];
+
+function stripHtml(html: string | undefined | null): string {
+  if (!html) return "";
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Scans description text for a stated years-of-experience requirement and
+ * returns the lowest minimum found (e.g. "3-5 years of experience" → 3,
+ * "5+ years experience" → 5). Returns null when no such pattern is found —
+ * callers should treat null as "unknown" and keep the job, not exclude it.
+ */
+export function extractMinYearsExperience(text: string): number | null {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  let min: number | null = null;
+  for (const pattern of YEARS_EXPERIENCE_PATTERNS) {
+    const re = new RegExp(pattern.source, pattern.flags);
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(t)) !== null) {
+      const n = parseInt(m[1], 10);
+      if (!Number.isNaN(n)) min = min === null ? n : Math.min(min, n);
+    }
+  }
+  return min;
+}
+
+export function isWithinExperienceCap(description: string | undefined | null): boolean {
+  const min = extractMinYearsExperience(description ?? "");
+  if (min === null) return true; // no stated requirement found — keep
+  return min <= EXPERIENCE_CAP_YEARS;
+}
+
 const FETCH_TIMEOUT_MS = 15000;
 
 async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
@@ -157,7 +215,7 @@ async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
 export async function fetchGreenhouse(c: CompanyConfig): Promise<NormalizedJob[]> {
   const data = (await fetchJson(
     `https://boards-api.greenhouse.io/v1/boards/${c.boardSlug}/jobs?content=true`,
-  )) as { jobs?: Array<{ id: number; title: string; absolute_url: string; location?: { name?: string }; updated_at?: string }> };
+  )) as { jobs?: Array<{ id: number; title: string; absolute_url: string; location?: { name?: string }; updated_at?: string; content?: string }> };
   if (!Array.isArray(data.jobs)) {
     throw new Error(
       `fetchGreenhouse: response envelope changed for board "${c.boardSlug}" — ` +
@@ -167,6 +225,7 @@ export async function fetchGreenhouse(c: CompanyConfig): Promise<NormalizedJob[]
   }
   return data.jobs
     .filter((j) => matchesApmTitle(j.title, c))
+    .filter((j) => isWithinExperienceCap(stripHtml(j.content)))
     .map((j) => ({
       id: `${c.slug}-${j.id}`,
       title: j.title,
@@ -182,7 +241,15 @@ export async function fetchGreenhouse(c: CompanyConfig): Promise<NormalizedJob[]
 export async function fetchLever(c: CompanyConfig): Promise<NormalizedJob[]> {
   const data = (await fetchJson(
     `https://api.lever.co/v0/postings/${c.boardSlug}?mode=json`,
-  )) as Array<{ id: string; text: string; hostedUrl: string; createdAt?: number; categories?: { location?: string } }>;
+  )) as Array<{
+    id: string;
+    text: string;
+    hostedUrl: string;
+    createdAt?: number;
+    categories?: { location?: string };
+    descriptionPlain?: string;
+    lists?: Array<{ text?: string; content?: string }>;
+  }>;
   if (!Array.isArray(data)) {
     throw new Error(
       `fetchLever: response is not an array for board "${c.boardSlug}" — ` +
@@ -192,6 +259,12 @@ export async function fetchLever(c: CompanyConfig): Promise<NormalizedJob[]> {
   }
   return data
     .filter((j) => matchesApmTitle(j.text, c))
+    .filter((j) => {
+      const desc = [j.descriptionPlain, ...(j.lists ?? []).map((l) => stripHtml(l.content))]
+        .filter(Boolean)
+        .join(" ");
+      return isWithinExperienceCap(desc);
+    })
     .map((j) => ({
       id: `${c.slug}-${j.id}`,
       title: j.text,
