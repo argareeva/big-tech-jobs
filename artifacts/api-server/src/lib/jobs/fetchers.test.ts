@@ -2178,15 +2178,24 @@ function makeAppleSearchResponse(body: unknown) {
 
 /**
  * Stubs global fetch for a full fetchApple run: the search-page GET, the
- * CSRF GET, then one search POST per page of `pages` (in order).
+ * CSRF GET, then one search POST per page of `productManagerPages` (the
+ * `"product manager"` query, in order), then one search POST per page of
+ * `rotationProgramPages` (the `"rotation program"` query — defaults to a
+ * single empty page, since fetchApple always issues at least one request
+ * per query regardless of whether the caller cares about its results).
  */
-function stubAppleFetch(pages: Array<{ results: AppleFixtureJob[]; totalRecords: number }>) {
+function stubAppleFetch(
+  productManagerPages: Array<{ results: AppleFixtureJob[]; totalRecords: number }>,
+  rotationProgramPages: Array<{ results: AppleFixtureJob[]; totalRecords: number }> = [
+    { results: [], totalRecords: 0 },
+  ],
+) {
   const mockFn = vi.fn();
   mockFn.mockResolvedValueOnce(makeAppleAuthResponse({ setCookies: ["jobs=session123; Path=/"] }));
   mockFn.mockResolvedValueOnce(
     makeAppleAuthResponse({ setCookies: ["jssid=abc; Path=/"], csrfToken: "csrf-token-abc" }),
   );
-  for (const page of pages) {
+  for (const page of [...productManagerPages, ...rotationProgramPages]) {
     mockFn.mockResolvedValueOnce(
       makeAppleSearchResponse({ res: { searchResults: page.results, totalRecords: page.totalRecords } }),
     );
@@ -2202,7 +2211,7 @@ describe("fetchApple — session/CSRF request shape", () => {
     ]);
     await fetchApple(appleConfig);
 
-    expect(mockFetch.mock.calls.length).toBe(3);
+    expect(mockFetch.mock.calls.length).toBe(4); // page + csrf + 1 search per query (2 queries)
     expect(mockFetch.mock.calls[0]![0]).toContain("jobs.apple.com/en-us/search");
     expect(mockFetch.mock.calls[1]![0]).toBe("https://jobs.apple.com/api/v1/CSRFToken");
     expect(mockFetch.mock.calls[2]![0]).toBe("https://jobs.apple.com/api/v1/search");
@@ -2297,7 +2306,7 @@ describe("fetchApple — pagination across totalRecords", () => {
       { results: [makeAppleJob({ positionId: "1", postingTitle: "Associate Product Manager" })], totalRecords: 1 },
     ]);
     await fetchApple(appleConfig);
-    expect(mockFetch.mock.calls.length).toBe(3); // page + csrf + exactly 1 search call
+    expect(mockFetch.mock.calls.length).toBe(4); // page + csrf + 1 search call per query (2 queries)
   });
 
   it("fetches every page needed to exhaust totalRecords, not just the first page", async () => {
@@ -2318,7 +2327,7 @@ describe("fetchApple — pagination across totalRecords", () => {
     ]);
     const jobs = await fetchApple(appleConfig);
 
-    expect(mockFetch.mock.calls.length).toBe(5); // page + csrf + 3 search calls
+    expect(mockFetch.mock.calls.length).toBe(6); // page + csrf + 3 search calls + 1 default rotation-query call
     expect(jobs.some((j) => j.id === "apple-p3-0")).toBe(true);
   });
 
@@ -2329,7 +2338,7 @@ describe("fetchApple — pagination across totalRecords", () => {
     ]);
     await fetchApple(appleConfig);
     // Should have stopped after the empty page rather than continuing to page 3+
-    expect(mockFetch.mock.calls.length).toBe(4); // page + csrf + 2 search calls
+    expect(mockFetch.mock.calls.length).toBe(5); // page + csrf + 2 search calls + 1 default rotation-query call
   });
 
   it("deduplicates jobs with the same positionId across pages", async () => {
@@ -2426,5 +2435,62 @@ describe("fetchApple — APM title filtering and field mapping", () => {
     ]);
     const jobs = await fetchApple(appleConfig);
     expect(jobs[0]!.location).toBe("Unspecified");
+  });
+});
+
+describe("fetchApple — multi-query (\"product manager\" + \"rotation program\")", () => {
+  it("sends the rotation-program query wrapped in literal double quotes on the second search request", async () => {
+    const mockFetch = stubAppleFetch([{ results: [], totalRecords: 0 }]);
+    await fetchApple(appleConfig);
+
+    const [, init] = mockFetch.mock.calls[3] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.query).toBe('"rotation program"');
+  });
+
+  it("surfaces early-career rotation-program titles that don't contain \"product manager\" at all", async () => {
+    // Real example found live 2026-09-16: Apple's "Hardware Products Early
+    // Career Rotation Program" has no "manager" in the title, so it's only
+    // findable via the "rotation program" query, not "product manager".
+    stubAppleFetch(
+      [{ results: [], totalRecords: 0 }],
+      [
+        {
+          results: [
+            makeAppleJob({
+              positionId: "200683630",
+              postingTitle: "Hardware Products Early Career Rotation Program",
+            }),
+          ],
+          totalRecords: 1,
+        },
+      ],
+    );
+    const jobs = await fetchApple(appleConfig);
+    expect(jobs.some((j) => j.id === "apple-200683630")).toBe(true);
+  });
+
+  it("merges and deduplicates jobs that appear in both query result sets", async () => {
+    const sharedJob = makeAppleJob({ positionId: "1", postingTitle: "Associate Product Manager Rotation Program" });
+    stubAppleFetch(
+      [{ results: [sharedJob], totalRecords: 1 }],
+      [{ results: [sharedJob], totalRecords: 1 }],
+    );
+    const jobs = await fetchApple(appleConfig);
+    expect(jobs.filter((j) => j.id === "apple-1").length).toBe(1);
+  });
+
+  it("still excludes rotation-program results that don't pass isApmTitle", async () => {
+    stubAppleFetch(
+      [{ results: [], totalRecords: 0 }],
+      [
+        {
+          results: [makeAppleJob({ positionId: "1", postingTitle: "Retail Leadership Rotation Program" })],
+          totalRecords: 1,
+        },
+      ],
+    );
+    const jobs = await fetchApple(appleConfig);
+    expect(jobs).toEqual([]);
   });
 });

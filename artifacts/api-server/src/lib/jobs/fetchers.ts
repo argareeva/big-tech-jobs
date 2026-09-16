@@ -809,23 +809,34 @@ export async function fetchAppleSearchPage(
  * literal double quotes (`"product manager"`) narrows it to a much smaller,
  * relevant set, matching the quoted-phrase pattern already used for
  * Disney/Google in this file. Apple has no single named APM/rotational
- * program, so this searches the generic "product manager" title space and
- * relies on matchesApmTitle/isApmTitle for the rest. Results are paginated
- * (20/page) and sorted newest-first, so every page up to totalRecords is
- * fetched — stopping after page 1 would silently miss a real match that
- * later dropped below the top 20.
+ * program, so this runs multiple targeted queries and relies on
+ * matchesApmTitle/isApmTitle for the rest:
+ *   - `"product manager"` — the generic PM title space.
+ *   - `"rotation program"` — Apple's early-career rotational programs don't
+ *     have "product manager" in the title at all (e.g. "Hardware Products
+ *     Early Career Rotation Program", found live 2026-09-16 from a
+ *     user-supplied job link) but are still a real APM-equivalent program;
+ *     isApmTitle already accepts them (via "products" + "early career"),
+ *     the search query was just too narrow to surface them.
+ * Results from every query are merged and deduped by positionId. Each
+ * query's results are paginated (20/page) and sorted newest-first, so every
+ * page up to totalRecords is fetched — stopping after page 1 would silently
+ * miss a real match that later dropped below the top 20.
  */
+const APPLE_QUERIES = ['"product manager"', '"rotation program"'];
+
 export async function fetchApple(c: CompanyConfig): Promise<NormalizedJob[]> {
   const session = await fetchAppleSession();
-  const query = '"product manager"';
 
   const allResults: AppleSearchResult[] = [];
-  let totalRecords = Infinity;
-  for (let page = 1; page <= APPLE_MAX_PAGES && (page - 1) * APPLE_PAGE_SIZE < totalRecords; page++) {
-    const { results, totalRecords: total } = await fetchAppleSearchPage(session, query, page);
-    totalRecords = total;
-    if (results.length === 0) break;
-    allResults.push(...results);
+  for (const query of APPLE_QUERIES) {
+    let totalRecords = Infinity;
+    for (let page = 1; page <= APPLE_MAX_PAGES && (page - 1) * APPLE_PAGE_SIZE < totalRecords; page++) {
+      const { results, totalRecords: total } = await fetchAppleSearchPage(session, query, page);
+      totalRecords = total;
+      if (results.length === 0) break;
+      allResults.push(...results);
+    }
   }
 
   const seen = new Set<string>();
