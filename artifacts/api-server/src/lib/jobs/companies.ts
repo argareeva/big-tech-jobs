@@ -279,18 +279,16 @@ export const COMPANIES: CompanyConfig[] = [
   // checks instead of relying on isInternshipTitle for this company.
   { name: "Jane Street", slug: "janestreet", ats: "custom", programName: "Strategy and Product", programStatus: "active",
     titleAliases: ["Strategy and Product"] },
-  // Apple — jobs.apple.com is a client-rendered React app. Earlier passes
-  // guessed the wrong endpoint path (POST /api/v1/search/search, a typo of
-  // the real /api/v1/search) and the wrong payload shape, both of which
-  // produced 401/436 errors that looked like a session/bot-protection lock.
-  // Reading the site's own JS bundle (jobsite.main.*.js, `const c = {
-  // csrf:{token:{url:"/api/v1/CSRFToken"}}, search:{search:{url:"/api/v1/search"}} }`
-  // and the request-builder function that calls `.search.search.post`)
-  // revealed the real path and body shape. It works with a plain session:
-  // GET the search page for a `jobs` cookie, GET /api/v1/CSRFToken for a
-  // token (sent back as X-Apple-CSRF-Token), then POST /api/v1/search with
-  // `{query, filters, page, locale, sort, format}`. No login/candidate auth
-  // needed — see fetchApple in fetchers.ts.
+  // Apple — jobs.apple.com is a client-rendered React app; found its real search
+  // API (POST /api/v1/search/search) via the page's own JS bundle. Confirmed it
+  // requires more than the CSRF token the page hands out: fetching
+  // /api/v1/CSRFToken (with the session cookie from an initial page load) and
+  // sending it back as X-Apple-CSRF-Token still returns 401 "User Unauthorized"
+  // on the search call — tried both header casings, GET and POST variants, and
+  // with Referer/Origin set. This looks like a genuine session/bot-protection
+  // lock (same family as Meta/BlackRock), not a stale conclusion — re-verify
+  // live if attempting this again, since Apple doesn't have a cohort APM
+  // program name to search for either way.
   { name: "Apple", slug: "apple", ats: "custom", programName: "Product Manager", programStatus: "active",
-    careersUrl: "https://jobs.apple.com/en-us/search?search=product%20manager" },
+    feedUnavailable: true, careersUrl: "https://jobs.apple.com/en-us/search?search=product%20manager" },
 ];
