@@ -11,6 +11,7 @@ import {
   fetchWorkday,
   fetchOracle,
   fetchJaneStreet,
+  fetchApple,
   isApmTitle,
   isInternshipTitle,
   matchesApmTitle,
@@ -2122,5 +2123,308 @@ describe("fetchOracle — APM title filtering and field mapping", () => {
     };
     stubFetch(makeOracleResponse(ORACLE_REQUISITIONS));
     await expect(fetchOracle(noOracleConfig)).rejects.toThrow(/Missing oracle config/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchApple
+// ---------------------------------------------------------------------------
+
+const appleConfig: CompanyConfig = {
+  name: "Apple",
+  slug: "apple",
+  ats: "custom",
+  programName: "Product Manager",
+  programStatus: "active",
+};
+
+interface AppleFixtureJob {
+  positionId: string;
+  postingTitle: string;
+  locations?: Array<{ name?: string; countryName?: string }>;
+  postDateInGMT?: string;
+  transformedPostingTitle?: string;
+}
+
+function makeAppleJob(overrides: Partial<AppleFixtureJob> & { positionId: string }): AppleFixtureJob {
+  return {
+    postingTitle: "Product Manager",
+    locations: [{ name: "Cupertino", countryName: "United States of America" }],
+    postDateInGMT: "2026-09-16T00:00:00.000Z",
+    transformedPostingTitle: "product-manager",
+    ...overrides,
+  };
+}
+
+/** A fake fetch Response for the initial search-page GET and the CSRF GET (both just need headers). */
+function makeAppleAuthResponse(opts: { setCookies?: string[]; csrfToken?: string | null } = {}) {
+  // "csrfToken" in opts, not `opts.csrfToken ?? default` — a caller passing
+  // csrfToken: null (to simulate the header being absent) must not be
+  // silently replaced by the default via `??`, since null is nullish too.
+  const csrfToken = "csrfToken" in opts ? opts.csrfToken : "csrf-token-abc";
+  return {
+    ok: true,
+    headers: {
+      getSetCookie: () => opts.setCookies ?? [],
+      get: (name: string) => (name.toLowerCase() === "x-apple-csrf-token" ? csrfToken : null),
+    },
+  };
+}
+
+/** A fake fetch Response for a /api/v1/search POST. */
+function makeAppleSearchResponse(body: unknown) {
+  return { ok: true, json: () => Promise.resolve(body) };
+}
+
+/**
+ * Stubs global fetch for a full fetchApple run: the search-page GET, the
+ * CSRF GET, then one search POST per page of `pages` (in order).
+ */
+function stubAppleFetch(pages: Array<{ results: AppleFixtureJob[]; totalRecords: number }>) {
+  const mockFn = vi.fn();
+  mockFn.mockResolvedValueOnce(makeAppleAuthResponse({ setCookies: ["jobs=session123; Path=/"] }));
+  mockFn.mockResolvedValueOnce(
+    makeAppleAuthResponse({ setCookies: ["jssid=abc; Path=/"], csrfToken: "csrf-token-abc" }),
+  );
+  for (const page of pages) {
+    mockFn.mockResolvedValueOnce(
+      makeAppleSearchResponse({ res: { searchResults: page.results, totalRecords: page.totalRecords } }),
+    );
+  }
+  vi.stubGlobal("fetch", mockFn);
+  return mockFn;
+}
+
+describe("fetchApple — session/CSRF request shape", () => {
+  it("loads the search page, then the CSRF token endpoint, then POSTs to /api/v1/search", async () => {
+    const mockFetch = stubAppleFetch([
+      { results: [makeAppleJob({ positionId: "1", postingTitle: "Associate Product Manager" })], totalRecords: 1 },
+    ]);
+    await fetchApple(appleConfig);
+
+    expect(mockFetch.mock.calls.length).toBe(3);
+    expect(mockFetch.mock.calls[0]![0]).toContain("jobs.apple.com/en-us/search");
+    expect(mockFetch.mock.calls[1]![0]).toBe("https://jobs.apple.com/api/v1/CSRFToken");
+    expect(mockFetch.mock.calls[2]![0]).toBe("https://jobs.apple.com/api/v1/search");
+  });
+
+  it("sends the CSRF token back as the X-Apple-CSRF-Token header on the search request", async () => {
+    const mockFetch = stubAppleFetch([
+      { results: [makeAppleJob({ positionId: "1", postingTitle: "Associate Product Manager" })], totalRecords: 1 },
+    ]);
+    await fetchApple(appleConfig);
+
+    const [, init] = mockFetch.mock.calls[2] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["x-apple-csrf-token"]).toBe("csrf-token-abc");
+  });
+
+  it("sends the session cookie captured from the search-page response on the search request", async () => {
+    const mockFetch = stubAppleFetch([
+      { results: [makeAppleJob({ positionId: "1", postingTitle: "Associate Product Manager" })], totalRecords: 1 },
+    ]);
+    await fetchApple(appleConfig);
+
+    const [, init] = mockFetch.mock.calls[2] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers.cookie).toContain("jobs=session123");
+    expect(headers.cookie).toContain("jssid=abc");
+  });
+
+  it("sends the query wrapped in literal double quotes, not a bare phrase", async () => {
+    const mockFetch = stubAppleFetch([
+      { results: [makeAppleJob({ positionId: "1", postingTitle: "Associate Product Manager" })], totalRecords: 1 },
+    ]);
+    await fetchApple(appleConfig);
+
+    const [, init] = mockFetch.mock.calls[2] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.query).toBe('"product manager"');
+  });
+
+  it("throws (not silent zero) when the CSRF token header is missing", async () => {
+    const mockFn = vi.fn();
+    mockFn.mockResolvedValueOnce(makeAppleAuthResponse({ setCookies: ["jobs=session123"] }));
+    mockFn.mockResolvedValueOnce(makeAppleAuthResponse({ csrfToken: null }));
+    vi.stubGlobal("fetch", mockFn);
+    await expect(fetchApple(appleConfig)).rejects.toThrow(/CSRFToken|csrf-token/i);
+  });
+
+  it("throws when the search-page GET is non-2xx", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    await expect(fetchApple(appleConfig)).rejects.toThrow("HTTP 503");
+  });
+
+  it("throws when the search POST is non-2xx", async () => {
+    const mockFn = vi.fn();
+    mockFn.mockResolvedValueOnce(makeAppleAuthResponse({ setCookies: ["jobs=session123"] }));
+    mockFn.mockResolvedValueOnce(makeAppleAuthResponse({ csrfToken: "csrf-token-abc" }));
+    mockFn.mockResolvedValueOnce({ ok: false, status: 436 });
+    vi.stubGlobal("fetch", mockFn);
+    await expect(fetchApple(appleConfig)).rejects.toThrow("HTTP 436");
+  });
+});
+
+describe("fetchApple — response shape guard (silent-zero prevention)", () => {
+  it("throws (not silent zero) when res.searchResults is missing", async () => {
+    stubAppleFetch([]);
+    const mockFn = vi.fn();
+    mockFn.mockResolvedValueOnce(makeAppleAuthResponse({ setCookies: ["jobs=session123"] }));
+    mockFn.mockResolvedValueOnce(makeAppleAuthResponse({ csrfToken: "csrf-token-abc" }));
+    mockFn.mockResolvedValueOnce(makeAppleSearchResponse({ res: { totalRecords: 5 } }));
+    vi.stubGlobal("fetch", mockFn);
+    await expect(fetchApple(appleConfig)).rejects.toThrow(/envelope changed|searchResults/i);
+  });
+
+  it("throws (not silent zero) when res.totalRecords is missing", async () => {
+    const mockFn = vi.fn();
+    mockFn.mockResolvedValueOnce(makeAppleAuthResponse({ setCookies: ["jobs=session123"] }));
+    mockFn.mockResolvedValueOnce(makeAppleAuthResponse({ csrfToken: "csrf-token-abc" }));
+    mockFn.mockResolvedValueOnce(makeAppleSearchResponse({ res: { searchResults: [] } }));
+    vi.stubGlobal("fetch", mockFn);
+    await expect(fetchApple(appleConfig)).rejects.toThrow(/envelope changed|totalRecords/i);
+  });
+
+  it("returns an empty array (not an error) when totalRecords is genuinely 0", async () => {
+    stubAppleFetch([{ results: [], totalRecords: 0 }]);
+    await expect(fetchApple(appleConfig)).resolves.toEqual([]);
+  });
+});
+
+describe("fetchApple — pagination across totalRecords", () => {
+  it("fetches only one page when totalRecords fits within the first page", async () => {
+    const mockFetch = stubAppleFetch([
+      { results: [makeAppleJob({ positionId: "1", postingTitle: "Associate Product Manager" })], totalRecords: 1 },
+    ]);
+    await fetchApple(appleConfig);
+    expect(mockFetch.mock.calls.length).toBe(3); // page + csrf + exactly 1 search call
+  });
+
+  it("fetches every page needed to exhaust totalRecords, not just the first page", async () => {
+    // 45 total records at 20/page (APPLE_PAGE_SIZE) needs 3 pages.
+    const page1 = Array.from({ length: 20 }, (_, i) =>
+      makeAppleJob({ positionId: `p1-${i}`, postingTitle: "Product Manager" }),
+    );
+    const page2 = Array.from({ length: 20 }, (_, i) =>
+      makeAppleJob({ positionId: `p2-${i}`, postingTitle: "Product Manager" }),
+    );
+    // The real match is buried on page 3, past the first 20 — proving
+    // pagination (not just page 1) is what surfaces it.
+    const page3 = [makeAppleJob({ positionId: "p3-0", postingTitle: "Associate Product Manager" })];
+    const mockFetch = stubAppleFetch([
+      { results: page1, totalRecords: 45 },
+      { results: page2, totalRecords: 45 },
+      { results: page3, totalRecords: 45 },
+    ]);
+    const jobs = await fetchApple(appleConfig);
+
+    expect(mockFetch.mock.calls.length).toBe(5); // page + csrf + 3 search calls
+    expect(jobs.some((j) => j.id === "apple-p3-0")).toBe(true);
+  });
+
+  it("stops paging once a page comes back empty, even if totalRecords implies more", async () => {
+    const mockFetch = stubAppleFetch([
+      { results: [makeAppleJob({ positionId: "1", postingTitle: "Associate Product Manager" })], totalRecords: 100 },
+      { results: [], totalRecords: 100 },
+    ]);
+    await fetchApple(appleConfig);
+    // Should have stopped after the empty page rather than continuing to page 3+
+    expect(mockFetch.mock.calls.length).toBe(4); // page + csrf + 2 search calls
+  });
+
+  it("deduplicates jobs with the same positionId across pages", async () => {
+    const dupe = makeAppleJob({ positionId: "1", postingTitle: "Associate Product Manager" });
+    const mockFetch = stubAppleFetch([
+      { results: [dupe], totalRecords: 25 },
+      { results: [dupe], totalRecords: 25 },
+    ]);
+    void mockFetch;
+    const jobs = await fetchApple(appleConfig);
+    expect(jobs.filter((j) => j.id === "apple-1").length).toBe(1);
+  });
+});
+
+describe("fetchApple — APM title filtering and field mapping", () => {
+  it("excludes plain 'Product Manager' titles with no entry-level qualifier word", async () => {
+    stubAppleFetch([
+      { results: [makeAppleJob({ positionId: "1", postingTitle: "Product Manager, Health" })], totalRecords: 1 },
+    ]);
+    const jobs = await fetchApple(appleConfig);
+    expect(jobs).toEqual([]);
+  });
+
+  it("includes 'Associate Product Manager' titles", async () => {
+    stubAppleFetch([
+      { results: [makeAppleJob({ positionId: "1", postingTitle: "Associate Product Manager, Health" })], totalRecords: 1 },
+    ]);
+    const jobs = await fetchApple(appleConfig);
+    expect(jobs.length).toBe(1);
+  });
+
+  it("excludes internship titles", async () => {
+    stubAppleFetch([
+      { results: [makeAppleJob({ positionId: "1", postingTitle: "Associate Product Manager Intern" })], totalRecords: 1 },
+    ]);
+    const jobs = await fetchApple(appleConfig);
+    expect(jobs).toEqual([]);
+  });
+
+  it("maps id, title, location, applyUrl, source, and postedOn fields correctly", async () => {
+    stubAppleFetch([
+      {
+        results: [
+          makeAppleJob({
+            positionId: "200683668",
+            postingTitle: "Associate Product Manager, Employee Experience",
+            locations: [{ name: "Sunnyvale", countryName: "United States of America" }],
+            postDateInGMT: "2026-09-16T19:56:09.761745057Z",
+            transformedPostingTitle: "associate-product-manager-employee-experience",
+          }),
+        ],
+        totalRecords: 1,
+      },
+    ]);
+    const jobs = await fetchApple(appleConfig);
+    const job = jobs.find((j) => j.id === "apple-200683668");
+
+    expect(job).toBeDefined();
+    expect(job!.title).toBe("Associate Product Manager, Employee Experience");
+    expect(job!.location).toBe("Sunnyvale");
+    expect(job!.applyUrl).toBe(
+      "https://jobs.apple.com/en-us/details/200683668/associate-product-manager-employee-experience",
+    );
+    expect(job!.source).toBe("apple");
+    expect(job!.postedOn).toBe("2026-09-16");
+    expect(job!.companySlug).toBe("apple");
+  });
+
+  it("falls back to countryName when a location has no name", async () => {
+    stubAppleFetch([
+      {
+        results: [
+          makeAppleJob({
+            positionId: "1",
+            postingTitle: "Associate Product Manager",
+            locations: [{ countryName: "India" }],
+          }),
+        ],
+        totalRecords: 1,
+      },
+    ]);
+    const jobs = await fetchApple(appleConfig);
+    expect(jobs[0]!.location).toBe("India");
+  });
+
+  it("falls back to 'Unspecified' when locations is empty", async () => {
+    stubAppleFetch([
+      {
+        results: [
+          makeAppleJob({ positionId: "1", postingTitle: "Associate Product Manager", locations: [] }),
+        ],
+        totalRecords: 1,
+      },
+    ]);
+    const jobs = await fetchApple(appleConfig);
+    expect(jobs[0]!.location).toBe("Unspecified");
   });
 });
