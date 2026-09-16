@@ -89,7 +89,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   vi.mocked(getJobs).mockReset().mockReturnValue([]);
-  vi.mocked(getCompanies).mockReset().mockReturnValue([]);
+  vi.mocked(getCompanies).mockReset().mockResolvedValue([]);
   vi.mocked(getCompanyStatus).mockReset().mockReturnValue(undefined);
   await cleanupTestRows();
 });
@@ -374,7 +374,7 @@ describe("GET /companies hasApplied", () => {
     });
     // No live jobs at all for this company — the applied posting is closed.
     vi.mocked(getJobs).mockReturnValue([]);
-    vi.mocked(getCompanies).mockReturnValue([
+    vi.mocked(getCompanies).mockResolvedValue([
       {
         config: {
           name: "Acme",
@@ -384,6 +384,7 @@ describe("GET /companies hasApplied", () => {
           programStatus: "active",
         },
         jobCount: 0,
+        hasEverPosted: false,
         lastCheckedAt: new Date().toISOString(),
         error: null,
       } as CompanyStatus,
@@ -398,7 +399,7 @@ describe("GET /companies hasApplied", () => {
   });
 
   it("reports hasApplied:false for a company with no applied jobs", async () => {
-    vi.mocked(getCompanies).mockReturnValue([
+    vi.mocked(getCompanies).mockResolvedValue([
       {
         config: {
           name: "Other Co",
@@ -408,6 +409,7 @@ describe("GET /companies hasApplied", () => {
           programStatus: "active",
         },
         jobCount: 0,
+        hasEverPosted: false,
         lastCheckedAt: new Date().toISOString(),
         error: null,
       } as CompanyStatus,

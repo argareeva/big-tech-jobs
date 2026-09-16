@@ -1,9 +1,11 @@
 import { COMPANIES, type CompanyConfig } from "./companies";
 import { fetchForCompany, FEED_UNAVAILABLE, type NormalizedJob } from "./fetchers";
+import { getCompaniesWithPostedJobs, recordCompanyPosted } from "./company-history";
 
 export interface CompanyStatus {
   config: CompanyConfig;
   jobCount: number;
+  hasEverPosted: boolean;
   lastCheckedAt: string | null;
   /** null = ok, "unavailable" = feed blocked server-side, any other string = fetch error */
   error: string | null;
@@ -21,6 +23,7 @@ const status = new Map<string, CompanyStatus>(
     {
       config: c,
       jobCount: 0,
+      hasEverPosted: false,
       lastCheckedAt: c.feedUnavailable ? "unavailable" : null,
       error: c.feedUnavailable ? "unavailable" : null,
     },
@@ -48,10 +51,19 @@ export function getJobs(filter?: { company?: string; q?: string }): NormalizedJo
   );
 }
 
-export function getCompanies(): CompanyStatus[] {
-  return COMPANIES.map((c) => status.get(c.slug)!).sort((a, b) =>
+export async function getCompanies(): Promise<CompanyStatus[]> {
+  const companiesWithPostedJobs = await getCompaniesWithPostedJobs();
+  const companies = COMPANIES.map((c) => status.get(c.slug)!).sort((a, b) =>
     a.config.name.localeCompare(b.config.name),
   );
+  return companies.map((company) => {
+    // The current live count is also a valid positive signal if history was
+    // just recorded during this refresh but the in-memory status has not been
+    // rehydrated yet.
+    company.hasEverPosted =
+      company.jobCount > 0 || companiesWithPostedJobs.has(company.config.slug);
+    return company;
+  });
 }
 
 /**
@@ -98,6 +110,10 @@ async function doRefresh(log: Logger): Promise<RefreshSummary> {
         if (result === FEED_UNAVAILABLE) return; // shouldn't happen, belt+suspenders
         jobs.set(c.slug, result);
         st.jobCount = result.length;
+        if (result.length > 0) {
+          await recordCompanyPosted(c.slug);
+          st.hasEverPosted = true;
+        }
         st.lastCheckedAt = new Date().toISOString();
         st.error = null;
         log.info({ company: c.slug, jobs: result.length }, "fetched jobs");

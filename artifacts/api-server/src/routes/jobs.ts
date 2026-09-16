@@ -284,11 +284,12 @@ router.get("/jobs/stats", async (_req, res) => {
   );
 });
 
-router.get("/companies", async (_req, res) => {
+router.get("/companies", async (req, res) => {
+  if (!hasData()) await refreshAll(req.log);
   const appliedCompanySlugs = await getAppliedCompanySlugs();
   res.json(
     ListCompaniesResponse.parse(
-      getCompanies().map((s) => ({
+      (await getCompanies()).map((s) => ({
         name: s.config.name,
         slug: s.config.slug,
         ats: s.config.ats,
@@ -296,6 +297,7 @@ router.get("/companies", async (_req, res) => {
         programStatus: s.config.programStatus,
         jobCount: s.jobCount,
         hasApplied: appliedCompanySlugs.has(s.config.slug),
+        hasEverPosted: s.hasEverPosted,
         lastCheckedAt: s.lastCheckedAt,
         error: s.error,
         careersUrl: s.config.careersUrl ?? null,

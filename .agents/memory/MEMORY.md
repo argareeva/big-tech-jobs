@@ -3,3 +3,4 @@
 - [APM tracker company sourcing](apm-company-sourcing.md) — apmlist.com is the reference source for new APM companies; only its full-time table counts, verify every ATS endpoint live before adding.
 - [APM title-matching scope](apm-title-matching-scope.md) — isApmTitle's exact matching rules and the user's stated intent behind them; check before further widening.
 - [APM tracker closed-job detection](apm-closed-job-detection.md) — closed requires per-company confirmed-fetch status, not just absence from the live jobs map.
+- [Company posting history](company-posting-history.md) — insert-only per-company feed history separates never-posted from previously posted and closed.

@@ -1,7 +1,16 @@
 import { useState } from 'react';
 import type { Company } from '@workspace/api-client-react';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, CheckCircle2, ExternalLink, Pause, WifiOff, CheckCheck } from 'lucide-react';
+import {
+  AlertCircle,
+  Archive,
+  CheckCircle2,
+  ExternalLink,
+  Pause,
+  WifiOff,
+  CheckCheck,
+  CircleDashed,
+} from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface CompanyGridProps {
@@ -41,8 +50,31 @@ export function CompanyGrid({ companies, onCompanyClick, selectedCompany, isLoad
   const appliedNoOpeningsCompanies = companies.filter(
     (c) => c.error !== 'unavailable' && c.jobCount === 0 && c.hasApplied,
   );
+  // A zero count is only a confirmed closure when the latest fetch succeeded.
+  // Fetch errors stay in the main grid rather than being mislabeled closed.
+  const previouslyPostedClosedCompanies = companies.filter(
+    (c) =>
+      c.error === null &&
+      c.jobCount === 0 &&
+      !c.hasApplied &&
+      c.hasEverPosted,
+  );
+  const neverPostedCompanies = companies.filter(
+    (c) =>
+      c.error === null &&
+      c.jobCount === 0 &&
+      !c.hasApplied &&
+      !c.hasEverPosted,
+  );
+  const separatedCompanySlugs = new Set([
+    ...appliedNoOpeningsCompanies.map((c) => c.slug),
+    ...previouslyPostedClosedCompanies.map((c) => c.slug),
+    ...neverPostedCompanies.map((c) => c.slug),
+  ]);
   const trackedCompanies = companies.filter(
-    (c) => c.error !== 'unavailable' && !(c.jobCount === 0 && c.hasApplied),
+    (c) =>
+      c.error !== 'unavailable' &&
+      !separatedCompanySlugs.has(c.slug),
   );
 
   return (
@@ -54,6 +86,48 @@ export function CompanyGrid({ companies, onCompanyClick, selectedCompany, isLoad
         expandedErrors={expandedErrors}
         toggleError={toggleError}
       />
+
+      {previouslyPostedClosedCompanies.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Archive className="w-4 h-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-muted-foreground">
+              Previously posted — now closed ({previouslyPostedClosedCompanies.length})
+            </h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            These companies have posted a tracked role before, but their feed has no open roles right now.
+          </p>
+          <CompanyCardGrid
+            companies={previouslyPostedClosedCompanies}
+            onCompanyClick={onCompanyClick}
+            selectedCompany={selectedCompany}
+            expandedErrors={expandedErrors}
+            toggleError={toggleError}
+          />
+        </div>
+      )}
+
+      {neverPostedCompanies.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <CircleDashed className="w-4 h-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-muted-foreground">
+              Never posted ({neverPostedCompanies.length})
+            </h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            These companies have not returned a tracked role yet. They may still post one later.
+          </p>
+          <CompanyCardGrid
+            companies={neverPostedCompanies}
+            onCompanyClick={onCompanyClick}
+            selectedCompany={selectedCompany}
+            expandedErrors={expandedErrors}
+            toggleError={toggleError}
+          />
+        </div>
+      )}
 
       {appliedNoOpeningsCompanies.length > 0 && (
         <div>
@@ -203,7 +277,11 @@ function CompanyCardGrid({
                       ? 'No feed'
                       : company.jobCount === 0 && company.hasApplied
                         ? 'Applied · none open now'
-                        : company.programName}
+                        : company.jobCount === 0 && company.hasEverPosted
+                          ? 'Previously posted · closed'
+                          : company.jobCount === 0
+                            ? 'Never posted'
+                            : company.programName}
                 </span>
               </div>
 

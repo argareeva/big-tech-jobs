@@ -136,6 +136,7 @@ export const ListCompaniesResponseItem = zod.object({
   "programStatus": zod.string().describe('active | paused'),
   "jobCount": zod.number(),
   "hasApplied": zod.boolean().describe('Whether the user has applied to at least one posting from this company, past or present'),
+  "hasEverPosted": zod.boolean().describe('Whether this company\'s live feed has returned at least one posting since history tracking began'),
   "lastCheckedAt": zod.string().nullish().describe('ISO timestamp of last successful fetch'),
   "error": zod.string().nullish().describe('Last fetch error, if any'),
   "careersUrl": zod.string().nullish().describe('Careers\/job-search page to check manually when there\'s no fetchable feed')

@@ -18,4 +18,5 @@
 //   export type Post = typeof postsTable.$inferSelect;
 
 export * from "./applied-jobs";
+export * from "./company-posting-history";
 export * from "./not-interested-jobs";
