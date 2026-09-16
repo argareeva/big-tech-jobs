@@ -16,6 +16,8 @@ export interface Company {
   /** active | paused */
   programStatus: string;
   jobCount: number;
+  /** Whether the user has applied to at least one posting from this company, past or present */
+  hasApplied: boolean;
   /**
      * ISO timestamp of last successful fetch
      * @nullable

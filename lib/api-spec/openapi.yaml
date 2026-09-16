@@ -164,7 +164,7 @@ components:
         - status
     Job:
       type: object
-      required: [id, title, company, companySlug, location, applyUrl, source, applied, notInterested]
+      required: [id, title, company, companySlug, location, applyUrl, source, applied, notInterested, closed]
       properties:
         id:
           type: string
@@ -193,9 +193,15 @@ components:
         notInterested:
           type: boolean
           description: Whether the user has marked this exact posting as not interested
+        closed:
+          type: boolean
+          description: >
+            True when this applied posting is no longer present in the live
+            company feed (the role closed or was removed). Always false for
+            jobs that aren't marked applied.
     Company:
       type: object
-      required: [name, slug, ats, programName, programStatus, jobCount]
+      required: [name, slug, ats, programName, programStatus, jobCount, hasApplied]
       properties:
         name:
           type: string
@@ -212,6 +218,9 @@ components:
           description: active | paused
         jobCount:
           type: number
+        hasApplied:
+          type: boolean
+          description: Whether the user has applied to at least one posting from this company, past or present
         lastCheckedAt:
           type: ["string", "null"]
           description: ISO timestamp of last successful fetch
@@ -283,6 +292,21 @@ components:
           description: The exact job id to mark/unmark (companySlug + external id)
         applied:
           type: boolean
+        title:
+          type: string
+          description: Required when applied is true — snapshot fields let the job keep showing up after the live posting closes
+        company:
+          type: string
+        companySlug:
+          type: string
+        location:
+          type: string
+        applyUrl:
+          type: string
+        source:
+          type: string
+        postedOn:
+          type: ["string", "null"]
     SetAppliedResponse:
       type: object
       required: [jobId, applied]

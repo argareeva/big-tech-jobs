@@ -11,6 +11,7 @@ import {
   getListJobsQueryKey,
   getListCompaniesQueryKey,
   getGetJobStatsQueryKey,
+  type Job,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
@@ -66,8 +67,22 @@ export default function Dashboard() {
     },
   });
 
-  const handleToggleApplied = (jobId: string, applied: boolean) => {
-    setAppliedMutation.mutate({ data: { jobId, applied } });
+  const handleToggleApplied = (job: Job, applied: boolean) => {
+    setAppliedMutation.mutate({
+      data: {
+        jobId: job.id,
+        applied,
+        // Snapshot the job's display fields so it keeps showing up under
+        // Applied even after the live posting closes.
+        title: job.title,
+        company: job.company,
+        companySlug: job.companySlug,
+        location: job.location,
+        applyUrl: job.applyUrl,
+        source: job.source,
+        postedOn: job.postedOn,
+      },
+    });
   };
 
   const setNotInterestedMutation = useSetJobNotInterested({

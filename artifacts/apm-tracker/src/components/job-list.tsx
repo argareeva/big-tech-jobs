@@ -9,7 +9,7 @@ interface JobListProps {
   jobs: Job[];
   isLoading?: boolean;
   view?: JobListView;
-  onToggleApplied?: (jobId: string, applied: boolean) => void;
+  onToggleApplied?: (job: Job, applied: boolean) => void;
   onToggleNotInterested?: (jobId: string, notInterested: boolean) => void;
   isUpdatingJobId?: string;
 }
@@ -87,6 +87,15 @@ export function JobList({
                     Applied
                   </Badge>
                 )}
+                {job.applied && job.closed && (
+                  <Badge
+                    variant="outline"
+                    className="flex-shrink-0 text-xs text-muted-foreground"
+                    data-testid={`badge-closed-${job.id}`}
+                  >
+                    Closed
+                  </Badge>
+                )}
                 {job.notInterested && (
                   <Badge
                     variant="secondary"
@@ -119,7 +128,7 @@ export function JobList({
                 size="sm"
                 className="flex-shrink-0 gap-1.5"
                 disabled={isUpdating}
-                onClick={() => onToggleApplied(job.id, !job.applied)}
+                onClick={() => onToggleApplied(job, !job.applied)}
                 data-testid={`button-toggle-applied-${job.id}`}
               >
                 {job.applied ? (

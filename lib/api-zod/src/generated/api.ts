@@ -38,7 +38,8 @@ export const ListJobsResponseItem = zod.object({
   "source": zod.string().describe('ATS source (greenhouse, lever, workday, google, uber)'),
   "postedOn": zod.string().nullish().describe('Posting date text if available'),
   "applied": zod.boolean().describe('Whether the user has marked this exact posting as applied'),
-  "notInterested": zod.boolean().describe('Whether the user has marked this exact posting as not interested')
+  "notInterested": zod.boolean().describe('Whether the user has marked this exact posting as not interested'),
+  "closed": zod.boolean().describe('True when this applied posting is no longer present in the live company feed (the role closed or was removed). Always false for jobs that aren\'t marked applied.\n')
 })
 export const ListJobsResponse = zod.array(ListJobsResponseItem)
 
@@ -48,7 +49,14 @@ export const ListJobsResponse = zod.array(ListJobsResponseItem)
  */
 export const SetJobAppliedBody = zod.object({
   "jobId": zod.string().describe('The exact job id to mark\/unmark (companySlug + external id)'),
-  "applied": zod.boolean()
+  "applied": zod.boolean(),
+  "title": zod.string().optional().describe('Required when applied is true — snapshot fields let the job keep showing up after the live posting closes'),
+  "company": zod.string().optional(),
+  "companySlug": zod.string().optional(),
+  "location": zod.string().optional(),
+  "applyUrl": zod.string().optional(),
+  "source": zod.string().optional(),
+  "postedOn": zod.string().nullish()
 })
 
 export const SetJobAppliedResponse = zod.object({
@@ -120,6 +128,7 @@ export const ListCompaniesResponseItem = zod.object({
   "programName": zod.string().describe('e.g. \"APM Program\", \"RPM Program\"'),
   "programStatus": zod.string().describe('active | paused'),
   "jobCount": zod.number(),
+  "hasApplied": zod.boolean().describe('Whether the user has applied to at least one posting from this company, past or present'),
   "lastCheckedAt": zod.string().nullish().describe('ISO timestamp of last successful fetch'),
   "error": zod.string().nullish().describe('Last fetch error, if any'),
   "careersUrl": zod.string().nullish().describe('Careers\/job-search page to check manually when there\'s no fetchable feed')

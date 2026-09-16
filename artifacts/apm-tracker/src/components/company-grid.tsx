@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Company } from '@workspace/api-client-react';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, CheckCircle2, ExternalLink, Pause, WifiOff } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink, Pause, WifiOff, CheckCheck } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface CompanyGridProps {
@@ -34,8 +34,16 @@ export function CompanyGrid({ companies, onCompanyClick, selectedCompany, isLoad
     setExpandedErrors(newExpanded);
   };
 
-  const trackedCompanies = companies.filter((c) => c.error !== 'unavailable');
   const noFeedCompanies = companies.filter((c) => c.error === 'unavailable');
+  // Applied-but-currently-closed companies would otherwise look identical
+  // to companies that simply never posted (both show jobCount: 0) — keep
+  // them in a visibly separate group so the applied history isn't lost.
+  const appliedNoOpeningsCompanies = companies.filter(
+    (c) => c.error !== 'unavailable' && c.jobCount === 0 && c.hasApplied,
+  );
+  const trackedCompanies = companies.filter(
+    (c) => c.error !== 'unavailable' && !(c.jobCount === 0 && c.hasApplied),
+  );
 
   return (
     <div className="space-y-6">
@@ -46,6 +54,28 @@ export function CompanyGrid({ companies, onCompanyClick, selectedCompany, isLoad
         expandedErrors={expandedErrors}
         toggleError={toggleError}
       />
+
+      {appliedNoOpeningsCompanies.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCheck className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-semibold text-muted-foreground">
+              Applied — no open postings right now ({appliedNoOpeningsCompanies.length})
+            </h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            You've applied here before. These currently have no open roles, but that's different
+            from never having applied — check "Show Applied" to see what you sent in.
+          </p>
+          <CompanyCardGrid
+            companies={appliedNoOpeningsCompanies}
+            onCompanyClick={onCompanyClick}
+            selectedCompany={selectedCompany}
+            expandedErrors={expandedErrors}
+            toggleError={toggleError}
+          />
+        </div>
+      )}
 
       {noFeedCompanies.length > 0 && (
         <div>
@@ -151,6 +181,11 @@ function CompanyCardGrid({
                   <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
                 ) : company.jobCount > 0 ? (
                   <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
+                ) : company.hasApplied ? (
+                  <CheckCheck
+                    className="w-4 h-4 text-primary flex-shrink-0"
+                    data-testid={`icon-applied-${company.slug}`}
+                  />
                 ) : null}
               </div>
 
@@ -162,7 +197,13 @@ function CompanyCardGrid({
                   {company.jobCount}
                 </Badge>
                 <span className="text-xs text-muted-foreground truncate">
-                  {isPaused ? 'Paused' : isUnavailable ? 'No feed' : company.programName}
+                  {isPaused
+                    ? 'Paused'
+                    : isUnavailable
+                      ? 'No feed'
+                      : company.jobCount === 0 && company.hasApplied
+                        ? 'Applied · none open now'
+                        : company.programName}
                 </span>
               </div>
 

@@ -10,4 +10,13 @@ export interface SetAppliedRequest {
   /** The exact job id to mark/unmark (companySlug + external id) */
   jobId: string;
   applied: boolean;
+  /** Required when applied is true — snapshot fields let the job keep showing up after the live posting closes */
+  title?: string;
+  company?: string;
+  companySlug?: string;
+  location?: string;
+  applyUrl?: string;
+  source?: string;
+  /** @nullable */
+  postedOn?: string | null;
 }
