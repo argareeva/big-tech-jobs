@@ -7,24 +7,10 @@ import {
   SetJobAppliedResponse,
   SetJobNotInterestedResponse,
 } from "@workspace/api-zod";
-import {
-  getJobs,
-  getCompanies,
-  getCompanyStatus,
-  getStats,
-  refreshAll,
-  hasData,
-} from "../lib/jobs/store";
-import {
-  getAppliedJobIds,
-  getAppliedJobs,
-  getAppliedCompanySlugs,
-  getAppliedCount,
-  setApplied,
-} from "../lib/jobs/applied";
+import { getJobs, getCompanies, getStats, refreshAll, hasData } from "../lib/jobs/store";
+import { getAppliedJobIds, getAppliedCount, setApplied } from "../lib/jobs/applied";
 import {
   getNotInterestedJobIds,
-  getNotInterestedJobs,
   getNotInterestedCount,
   setNotInterested,
 } from "../lib/jobs/not-interested";
@@ -32,122 +18,17 @@ import { sendDigest } from "../lib/email/send-digest";
 
 const router: IRouter = Router();
 
-/**
- * A persisted (applied/not-interested) job is only "confirmed closed" when
- * ALL of the following hold:
- *  - the live feed overall has data (`feedHealthy`) — if the entire
- *    in-memory jobs map is empty (refreshAll() hasn't run yet, every fetch
- *    failed, or a bug wiped it), we have no reliable live data for *any*
- *    company, so nothing can be confirmed closed;
- *  - the specific company was fetched successfully at least once (no error
- *    on its status) — a company whose fetch errored or was never attempted
- *    might just have stale/missing data, not a real closure;
- *  - the job is still missing from the live feed.
- * Missing any of these means "unknown," not "closed" — we'd rather keep
- * showing a posting than wrongly hide it as closed.
- */
-function isConfirmedClosed(companySlug: string, live: unknown, feedHealthy: boolean): boolean {
-  if (!feedHealthy) return false;
-  if (live) return false;
-  const companyStatus = companySlug ? getCompanyStatus(companySlug) : undefined;
-  if (!companyStatus) return false;
-  if (companyStatus.error !== null) return false;
-  return true;
-}
-
 router.get("/jobs", async (req, res) => {
   if (!hasData()) await refreshAll(req.log);
   const { company, q, status } = req.query as { company?: string; q?: string; status?: string };
   const appliedIds = await getAppliedJobIds();
   const notInterestedIds = await getNotInterestedJobIds();
-
-  if (status === "applied") {
-    // Applied jobs are persisted independently of the live feed, so a
-    // closed posting still shows up here (flagged as closed) instead of
-    // silently disappearing once the company's feed drops it.
-    const liveById = new Map(getJobs({ company, q }).map((j) => [j.id, j]));
-    // Feed health is judged from the whole live feed, not the
-    // company/q-filtered slice above, so a filter never masks the
-    // "we have no live data at all" case.
-    const feedHealthy = getJobs().length > 0;
-    let appliedJobs = await getAppliedJobs();
-    if (company) appliedJobs = appliedJobs.filter((a) => a.companySlug === company);
-    if (q) {
-      const needle = q.toLowerCase();
-      appliedJobs = appliedJobs.filter((a) => a.title.toLowerCase().includes(needle));
-    }
-    const result = appliedJobs
-      .map((a) => {
-        const live = liveById.get(a.jobId);
-        return {
-          id: a.jobId,
-          title: live?.title ?? a.title,
-          company: live?.company ?? a.company,
-          companySlug: live?.companySlug ?? a.companySlug,
-          location: live?.location ?? a.location,
-          applyUrl: live?.applyUrl ?? a.applyUrl,
-          source: live?.source ?? a.source,
-          postedOn: live?.postedOn ?? a.postedOn ?? null,
-          applied: true,
-          notInterested: notInterestedIds.has(a.jobId),
-          closed: isConfirmedClosed(live?.companySlug ?? a.companySlug, live, feedHealthy),
-        };
-      })
-      .sort((a, b) => a.company.localeCompare(b.company) || a.title.localeCompare(b.title));
-    res.json(ListJobsResponse.parse(result));
-    return;
-  }
-
-  if (status === "not_interested") {
-    // Not-interested jobs are persisted independently of the live feed, so
-    // a closed posting still shows up here (flagged as closed) instead of
-    // silently disappearing once the company's feed drops it.
-    // liveById is unfiltered by company/q — a dismissed job whose live
-    // posting no longer matches the current filters (e.g. it's closed) must
-    // still be looked up so we can tell it apart from one that never had a
-    // snapshot at all.
-    const liveById = new Map(getJobs().map((j) => [j.id, j]));
-    const feedHealthy = liveById.size > 0;
-    let dismissedJobs = await getNotInterestedJobs();
-    if (company) {
-      dismissedJobs = dismissedJobs.filter(
-        (d) => (d.companySlug ?? liveById.get(d.jobId)?.companySlug) === company,
-      );
-    }
-    if (q) {
-      const needle = q.toLowerCase();
-      dismissedJobs = dismissedJobs.filter((d) =>
-        (d.title ?? liveById.get(d.jobId)?.title ?? "").toLowerCase().includes(needle),
-      );
-    }
-    const result = dismissedJobs
-      .map((d) => {
-        const live = liveById.get(d.jobId);
-        // Rows dismissed before the snapshot feature shipped have no
-        // stored details. If the live posting is also gone, fall back to
-        // placeholders rather than fabricating data — the row still stays
-        // suppressed either way.
-        return {
-          id: d.jobId,
-          title: live?.title ?? d.title ?? "(details unavailable)",
-          company: live?.company ?? d.company ?? "(details unavailable)",
-          companySlug: live?.companySlug ?? d.companySlug ?? "",
-          location: live?.location ?? d.location ?? "(details unavailable)",
-          applyUrl: live?.applyUrl ?? d.applyUrl ?? "",
-          source: live?.source ?? d.source ?? "unknown",
-          postedOn: live?.postedOn ?? d.postedOn ?? null,
-          applied: appliedIds.has(d.jobId),
-          notInterested: true,
-          closed: isConfirmedClosed(live?.companySlug ?? d.companySlug ?? "", live, feedHealthy),
-        };
-      })
-      .sort((a, b) => a.company.localeCompare(b.company) || a.title.localeCompare(b.title));
-    res.json(ListJobsResponse.parse(result));
-    return;
-  }
-
   let all = getJobs({ company, q });
-  if (status !== "all") {
+  if (status === "applied") {
+    all = all.filter((j) => appliedIds.has(j.id));
+  } else if (status === "not_interested") {
+    all = all.filter((j) => notInterestedIds.has(j.id));
+  } else if (status !== "all") {
     all = all.filter((j) => !appliedIds.has(j.id) && !notInterestedIds.has(j.id));
   }
   res.json(
@@ -156,107 +37,31 @@ router.get("/jobs", async (req, res) => {
         ...j,
         applied: appliedIds.has(j.id),
         notInterested: notInterestedIds.has(j.id),
-        closed: false,
       })),
     ),
   );
 });
 
 router.post("/jobs/applied", async (req, res) => {
-  const body = (req.body ?? {}) as Record<string, unknown>;
-  const { jobId, applied } = body as { jobId?: unknown; applied?: unknown };
+  const { jobId, applied } = (req.body ?? {}) as { jobId?: unknown; applied?: unknown };
   if (typeof jobId !== "string" || !jobId || typeof applied !== "boolean") {
     res.status(400).json({ error: "jobId (string) and applied (boolean) are required" });
     return;
   }
-  if (applied) {
-    const { title, company, companySlug, location, applyUrl, source } = body as Record<
-      string,
-      unknown
-    >;
-    if (
-      typeof title !== "string" ||
-      !title ||
-      typeof company !== "string" ||
-      !company ||
-      typeof companySlug !== "string" ||
-      !companySlug ||
-      typeof location !== "string" ||
-      !location ||
-      typeof applyUrl !== "string" ||
-      !applyUrl ||
-      typeof source !== "string" ||
-      !source
-    ) {
-      res.status(400).json({
-        error:
-          "title, company, companySlug, location, applyUrl, and source (all strings) are required when applied is true",
-      });
-      return;
-    }
-    const postedOn = typeof body.postedOn === "string" ? body.postedOn : null;
-    await setApplied(jobId, true, {
-      jobId,
-      title,
-      company,
-      companySlug,
-      location,
-      applyUrl,
-      source,
-      postedOn,
-    });
-  } else {
-    await setApplied(jobId, false);
-  }
+  await setApplied(jobId, applied);
   res.json(SetJobAppliedResponse.parse({ jobId, applied }));
 });
 
 router.post("/jobs/not-interested", async (req, res) => {
-  const body = (req.body ?? {}) as Record<string, unknown>;
-  const { jobId, notInterested } = body as { jobId?: unknown; notInterested?: unknown };
+  const { jobId, notInterested } = (req.body ?? {}) as {
+    jobId?: unknown;
+    notInterested?: unknown;
+  };
   if (typeof jobId !== "string" || !jobId || typeof notInterested !== "boolean") {
     res.status(400).json({ error: "jobId (string) and notInterested (boolean) are required" });
     return;
   }
-  if (notInterested) {
-    const { title, company, companySlug, location, applyUrl, source } = body as Record<
-      string,
-      unknown
-    >;
-    if (
-      typeof title !== "string" ||
-      !title ||
-      typeof company !== "string" ||
-      !company ||
-      typeof companySlug !== "string" ||
-      !companySlug ||
-      typeof location !== "string" ||
-      !location ||
-      typeof applyUrl !== "string" ||
-      !applyUrl ||
-      typeof source !== "string" ||
-      !source
-    ) {
-      res.status(400).json({
-        error:
-          "title, company, companySlug, location, applyUrl, and source (all strings) are required when notInterested is true",
-      });
-      return;
-    }
-    const postedOn = typeof body.postedOn === "string" ? body.postedOn : null;
-    await setNotInterested(jobId, true, {
-      jobId,
-      title,
-      company,
-      companySlug,
-      location,
-      applyUrl,
-      source,
-      postedOn,
-    });
-  } else {
-    await setNotInterested(jobId, false);
-  }
+  await setNotInterested(jobId, notInterested);
   res.json(SetJobNotInterestedResponse.parse({ jobId, notInterested }));
 });
 
@@ -284,20 +89,16 @@ router.get("/jobs/stats", async (_req, res) => {
   );
 });
 
-router.get("/companies", async (req, res) => {
-  if (!hasData()) await refreshAll(req.log);
-  const appliedCompanySlugs = await getAppliedCompanySlugs();
+router.get("/companies", (_req, res) => {
   res.json(
     ListCompaniesResponse.parse(
-      (await getCompanies()).map((s) => ({
+      getCompanies().map((s) => ({
         name: s.config.name,
         slug: s.config.slug,
         ats: s.config.ats,
         programName: s.config.programName,
         programStatus: s.config.programStatus,
         jobCount: s.jobCount,
-        hasApplied: appliedCompanySlugs.has(s.config.slug),
-        hasEverPosted: s.hasEverPosted,
         lastCheckedAt: s.lastCheckedAt,
         error: s.error,
         careersUrl: s.config.careersUrl ?? null,

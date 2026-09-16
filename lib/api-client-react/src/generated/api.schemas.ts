@@ -30,8 +30,6 @@ export interface Job {
   applied: boolean;
   /** Whether the user has marked this exact posting as not interested */
   notInterested: boolean;
-  /** True when this applied or not-interested posting is no longer present in the live company feed (the role closed or was removed). Always false for jobs that aren't marked applied or not interested. */
-  closed: boolean;
 }
 
 export interface Company {
@@ -44,10 +42,6 @@ export interface Company {
   /** active | paused */
   programStatus: string;
   jobCount: number;
-  /** Whether the user has applied to at least one posting from this company, past or present */
-  hasApplied: boolean;
-  /** Whether this company's live feed has returned at least one posting since history tracking began */
-  hasEverPosted: boolean;
   /**
      * ISO timestamp of last successful fetch
      * @nullable
@@ -106,15 +100,6 @@ export interface SetAppliedRequest {
   /** The exact job id to mark/unmark (companySlug + external id) */
   jobId: string;
   applied: boolean;
-  /** Required when applied is true — snapshot fields let the job keep showing up after the live posting closes */
-  title?: string;
-  company?: string;
-  companySlug?: string;
-  location?: string;
-  applyUrl?: string;
-  source?: string;
-  /** @nullable */
-  postedOn?: string | null;
 }
 
 export interface SetAppliedResponse {
@@ -126,15 +111,6 @@ export interface SetNotInterestedRequest {
   /** The exact job id to mark/unmark (companySlug + external id) */
   jobId: string;
   notInterested: boolean;
-  /** Required when notInterested is true — snapshot fields let the job keep showing up after the live posting closes */
-  title?: string;
-  company?: string;
-  companySlug?: string;
-  location?: string;
-  applyUrl?: string;
-  source?: string;
-  /** @nullable */
-  postedOn?: string | null;
 }
 
 export interface SetNotInterestedResponse {

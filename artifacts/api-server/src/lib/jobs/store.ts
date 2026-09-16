@@ -1,11 +1,9 @@
 import { COMPANIES, type CompanyConfig } from "./companies";
 import { fetchForCompany, FEED_UNAVAILABLE, type NormalizedJob } from "./fetchers";
-import { getCompaniesWithPostedJobs, recordCompanyPosted } from "./company-history";
 
 export interface CompanyStatus {
   config: CompanyConfig;
   jobCount: number;
-  hasEverPosted: boolean;
   lastCheckedAt: string | null;
   /** null = ok, "unavailable" = feed blocked server-side, any other string = fetch error */
   error: string | null;
@@ -23,7 +21,6 @@ const status = new Map<string, CompanyStatus>(
     {
       config: c,
       jobCount: 0,
-      hasEverPosted: false,
       lastCheckedAt: c.feedUnavailable ? "unavailable" : null,
       error: c.feedUnavailable ? "unavailable" : null,
     },
@@ -51,29 +48,10 @@ export function getJobs(filter?: { company?: string; q?: string }): NormalizedJo
   );
 }
 
-export async function getCompanies(): Promise<CompanyStatus[]> {
-  const companiesWithPostedJobs = await getCompaniesWithPostedJobs();
-  const companies = COMPANIES.map((c) => status.get(c.slug)!).sort((a, b) =>
+export function getCompanies(): CompanyStatus[] {
+  return COMPANIES.map((c) => status.get(c.slug)!).sort((a, b) =>
     a.config.name.localeCompare(b.config.name),
   );
-  return companies.map((company) => {
-    // The current live count is also a valid positive signal if history was
-    // just recorded during this refresh but the in-memory status has not been
-    // rehydrated yet.
-    company.hasEverPosted =
-      company.jobCount > 0 || companiesWithPostedJobs.has(company.config.slug);
-    return company;
-  });
-}
-
-/**
- * Status for a single company's live feed, used to tell "we successfully
- * fetched this company and the job is genuinely gone" apart from "we have
- * no reliable live data for this company yet" (never fetched, or the last
- * fetch failed). Returns undefined for an unrecognized slug.
- */
-export function getCompanyStatus(slug: string): CompanyStatus | undefined {
-  return status.get(slug);
 }
 
 export function getStats() {
@@ -110,10 +88,6 @@ async function doRefresh(log: Logger): Promise<RefreshSummary> {
         if (result === FEED_UNAVAILABLE) return; // shouldn't happen, belt+suspenders
         jobs.set(c.slug, result);
         st.jobCount = result.length;
-        if (result.length > 0) {
-          await recordCompanyPosted(c.slug);
-          st.hasEverPosted = true;
-        }
         st.lastCheckedAt = new Date().toISOString();
         st.error = null;
         log.info({ company: c.slug, jobs: result.length }, "fetched jobs");
@@ -126,19 +100,8 @@ async function doRefresh(log: Logger): Promise<RefreshSummary> {
     }),
   );
   lastRefreshAt = new Date().toISOString();
-  const totalJobs = getStats().totalJobs;
-  if (totalJobs === 0) {
-    // Nothing came back from any company. This could be a genuine global
-    // outage, but it's exactly the situation that would otherwise make
-    // every applied/not-interested posting look "closed" — flag it loudly
-    // so it doesn't pass silently.
-    log.warn(
-      { companiesChecked: COMPANIES.length, errors: errors.length },
-      "live jobs feed refresh returned zero jobs across all companies",
-    );
-  }
   return {
-    totalJobs,
+    totalJobs: getStats().totalJobs,
     companiesChecked: COMPANIES.length,
     errors,
     refreshedAt: lastRefreshAt,

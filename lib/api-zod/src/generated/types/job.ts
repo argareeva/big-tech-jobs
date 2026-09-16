@@ -27,6 +27,4 @@ export interface Job {
   applied: boolean;
   /** Whether the user has marked this exact posting as not interested */
   notInterested: boolean;
-  /** True when this applied or not-interested posting is no longer present in the live company feed (the role closed or was removed). Always false for jobs that aren't marked applied or not interested. */
-  closed: boolean;
 }

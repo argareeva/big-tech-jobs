@@ -16,10 +16,6 @@ export interface Company {
   /** active | paused */
   programStatus: string;
   jobCount: number;
-  /** Whether the user has applied to at least one posting from this company, past or present */
-  hasApplied: boolean;
-  /** Whether this company's live feed has returned at least one posting since history tracking began */
-  hasEverPosted: boolean;
   /**
      * ISO timestamp of last successful fetch
      * @nullable

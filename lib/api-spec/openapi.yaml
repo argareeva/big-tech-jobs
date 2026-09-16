@@ -164,7 +164,7 @@ components:
         - status
     Job:
       type: object
-      required: [id, title, company, companySlug, location, applyUrl, source, applied, notInterested, closed]
+      required: [id, title, company, companySlug, location, applyUrl, source, applied, notInterested]
       properties:
         id:
           type: string
@@ -193,16 +193,9 @@ components:
         notInterested:
           type: boolean
           description: Whether the user has marked this exact posting as not interested
-        closed:
-          type: boolean
-          description: >
-            True when this applied or not-interested posting is no longer
-            present in the live company feed (the role closed or was
-            removed). Always false for jobs that aren't marked applied or
-            not interested.
     Company:
       type: object
-      required: [name, slug, ats, programName, programStatus, jobCount, hasApplied, hasEverPosted]
+      required: [name, slug, ats, programName, programStatus, jobCount]
       properties:
         name:
           type: string
@@ -219,12 +212,6 @@ components:
           description: active | paused
         jobCount:
           type: number
-        hasApplied:
-          type: boolean
-          description: Whether the user has applied to at least one posting from this company, past or present
-        hasEverPosted:
-          type: boolean
-          description: Whether this company's live feed has returned at least one posting since history tracking began
         lastCheckedAt:
           type: ["string", "null"]
           description: ISO timestamp of last successful fetch
@@ -296,21 +283,6 @@ components:
           description: The exact job id to mark/unmark (companySlug + external id)
         applied:
           type: boolean
-        title:
-          type: string
-          description: Required when applied is true — snapshot fields let the job keep showing up after the live posting closes
-        company:
-          type: string
-        companySlug:
-          type: string
-        location:
-          type: string
-        applyUrl:
-          type: string
-        source:
-          type: string
-        postedOn:
-          type: ["string", "null"]
     SetAppliedResponse:
       type: object
       required: [jobId, applied]
@@ -328,23 +300,6 @@ components:
           description: The exact job id to mark/unmark (companySlug + external id)
         notInterested:
           type: boolean
-        title:
-          type: string
-          description: >
-            Required when notInterested is true — snapshot fields let the job
-            keep showing up after the live posting closes
-        company:
-          type: string
-        companySlug:
-          type: string
-        location:
-          type: string
-        applyUrl:
-          type: string
-        source:
-          type: string
-        postedOn:
-          type: ["string", "null"]
     SetNotInterestedResponse:
       type: object
       required: [jobId, notInterested]
