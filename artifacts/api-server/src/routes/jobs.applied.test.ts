@@ -10,6 +10,7 @@ import type { CompanyStatus } from "../lib/jobs/store.js";
 vi.mock("../lib/jobs/store", () => ({
   getJobs: vi.fn(),
   getCompanies: vi.fn(),
+  getCompanyStatus: vi.fn(),
   getStats: vi.fn(() => ({
     totalJobs: 0,
     companiesWithJobs: 0,
@@ -20,7 +21,7 @@ vi.mock("../lib/jobs/store", () => ({
   refreshAll: vi.fn(),
 }));
 
-const { getJobs, getCompanies } = await import("../lib/jobs/store.js");
+const { getJobs, getCompanies, getCompanyStatus } = await import("../lib/jobs/store.js");
 const { default: app } = await import("../app.js");
 
 // Rows created by these tests are always prefixed so cleanup can never touch
@@ -89,6 +90,7 @@ afterAll(async () => {
 beforeEach(async () => {
   vi.mocked(getJobs).mockReset().mockReturnValue([]);
   vi.mocked(getCompanies).mockReset().mockReturnValue([]);
+  vi.mocked(getCompanyStatus).mockReset().mockReturnValue(undefined);
   await cleanupTestRows();
 });
 
@@ -215,8 +217,25 @@ describe("GET /jobs?status=applied", () => {
       source: "greenhouse",
       postedOn: "2026-01-01",
     });
-    // Live feed no longer contains this job — it closed.
-    vi.mocked(getJobs).mockReturnValue([]);
+    // Live feed no longer contains this job, but the overall feed is
+    // healthy (another company still has live jobs) and this company was
+    // itself successfully fetched (no error) — so this really is a
+    // confirmed close, not a missing-data situation.
+    vi.mocked(getJobs).mockReturnValue([
+      liveJob({ id: `${PREFIX}job-other-co`, companySlug: `${PREFIX}other-co` }),
+    ]);
+    vi.mocked(getCompanyStatus).mockReturnValue({
+      config: {
+        name: "Acme",
+        slug: COMPANY_SLUG,
+        ats: "greenhouse",
+        programName: "APM Program",
+        programStatus: "active",
+      },
+      jobCount: 0,
+      lastCheckedAt: new Date().toISOString(),
+      error: null,
+    } as CompanyStatus);
 
     const { status, json } = await getJson(`/jobs?status=applied&company=${COMPANY_SLUG}`);
 
@@ -228,6 +247,115 @@ describe("GET /jobs?status=applied", () => {
       company: "Acme",
       applied: true,
       closed: true,
+    });
+  });
+
+  it("does NOT mark an applied posting closed when the live feed has no data for that company yet", async () => {
+    await db.insert(appliedJobsTable).values({
+      jobId: `${PREFIX}job-1`,
+      title: "Associate Product Manager",
+      company: "Acme",
+      companySlug: COMPANY_SLUG,
+      location: "New York, NY",
+      applyUrl: "https://acme.example.com/jobs/1",
+      source: "greenhouse",
+      postedOn: "2026-01-01",
+    });
+    // The live feed is empty (e.g. refreshAll() hasn't run yet, or the
+    // in-memory jobs Map got wiped) and we have no successful-fetch status
+    // for this company at all.
+    vi.mocked(getJobs).mockReturnValue([]);
+    vi.mocked(getCompanyStatus).mockReturnValue(undefined);
+
+    const { status, json } = await getJson(`/jobs?status=applied&company=${COMPANY_SLUG}`);
+
+    expect(status).toBe(200);
+    expect(json).toHaveLength(1);
+    expect(json[0]).toMatchObject({
+      id: `${PREFIX}job-1`,
+      applied: true,
+      closed: false,
+    });
+  });
+
+  it("does NOT mark an applied posting closed when the company's last fetch errored", async () => {
+    await db.insert(appliedJobsTable).values({
+      jobId: `${PREFIX}job-1`,
+      title: "Associate Product Manager",
+      company: "Acme",
+      companySlug: COMPANY_SLUG,
+      location: "New York, NY",
+      applyUrl: "https://acme.example.com/jobs/1",
+      source: "greenhouse",
+      postedOn: "2026-01-01",
+    });
+    // Feed overall is healthy (another company has live jobs); it's this
+    // one company's fetch that errored, so its data can't be trusted.
+    vi.mocked(getJobs).mockReturnValue([
+      liveJob({ id: `${PREFIX}job-other-co`, companySlug: `${PREFIX}other-co` }),
+    ]);
+    vi.mocked(getCompanyStatus).mockReturnValue({
+      config: {
+        name: "Acme",
+        slug: COMPANY_SLUG,
+        ats: "greenhouse",
+        programName: "APM Program",
+        programStatus: "active",
+      },
+      jobCount: 0,
+      lastCheckedAt: new Date().toISOString(),
+      error: "fetch failed: 500",
+    } as CompanyStatus);
+
+    const { status, json } = await getJson(`/jobs?status=applied&company=${COMPANY_SLUG}`);
+
+    expect(status).toBe(200);
+    expect(json).toHaveLength(1);
+    expect(json[0]).toMatchObject({
+      id: `${PREFIX}job-1`,
+      applied: true,
+      closed: false,
+    });
+  });
+
+  it("does NOT mark an applied posting closed when EVERY company's fetch succeeded but returned zero jobs", async () => {
+    await db.insert(appliedJobsTable).values({
+      jobId: `${PREFIX}job-1`,
+      title: "Associate Product Manager",
+      company: "Acme",
+      companySlug: COMPANY_SLUG,
+      location: "New York, NY",
+      applyUrl: "https://acme.example.com/jobs/1",
+      source: "greenhouse",
+      postedOn: "2026-01-01",
+    });
+    // This is the dangerous case: every company reports success (no
+    // per-company error), but the aggregate live feed is completely empty
+    // — e.g. a bug wiped the in-memory jobs Map after a "successful"
+    // refresh. Per-company status alone would wrongly call this confirmed
+    // closed; the overall feed-health check must catch it.
+    vi.mocked(getJobs).mockReturnValue([]);
+    vi.mocked(getCompanyStatus).mockReturnValue({
+      config: {
+        name: "Acme",
+        slug: COMPANY_SLUG,
+        ats: "greenhouse",
+        programName: "APM Program",
+        programStatus: "active",
+      },
+      jobCount: 0,
+      lastCheckedAt: new Date().toISOString(),
+      error: null,
+    } as CompanyStatus);
+
+    const { status, json } = await getJson(`/jobs?status=applied&company=${COMPANY_SLUG}`);
+
+    expect(status).toBe(200);
+    expect(json).toHaveLength(1);
+    expect(json[0]).toMatchObject({
+      id: `${PREFIX}job-1`,
+      applied: true,
+      closed: false,
     });
   });
 });

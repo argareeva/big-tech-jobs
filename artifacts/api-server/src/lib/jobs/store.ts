@@ -54,6 +54,16 @@ export function getCompanies(): CompanyStatus[] {
   );
 }
 
+/**
+ * Status for a single company's live feed, used to tell "we successfully
+ * fetched this company and the job is genuinely gone" apart from "we have
+ * no reliable live data for this company yet" (never fetched, or the last
+ * fetch failed). Returns undefined for an unrecognized slug.
+ */
+export function getCompanyStatus(slug: string): CompanyStatus | undefined {
+  return status.get(slug);
+}
+
 export function getStats() {
   const all = [...jobs.values()].flat();
   return {
@@ -100,8 +110,19 @@ async function doRefresh(log: Logger): Promise<RefreshSummary> {
     }),
   );
   lastRefreshAt = new Date().toISOString();
+  const totalJobs = getStats().totalJobs;
+  if (totalJobs === 0) {
+    // Nothing came back from any company. This could be a genuine global
+    // outage, but it's exactly the situation that would otherwise make
+    // every applied/not-interested posting look "closed" — flag it loudly
+    // so it doesn't pass silently.
+    log.warn(
+      { companiesChecked: COMPANIES.length, errors: errors.length },
+      "live jobs feed refresh returned zero jobs across all companies",
+    );
+  }
   return {
-    totalJobs: getStats().totalJobs,
+    totalJobs,
     companiesChecked: COMPANIES.length,
     errors,
     refreshedAt: lastRefreshAt,

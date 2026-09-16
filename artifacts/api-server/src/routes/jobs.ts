@@ -7,7 +7,14 @@ import {
   SetJobAppliedResponse,
   SetJobNotInterestedResponse,
 } from "@workspace/api-zod";
-import { getJobs, getCompanies, getStats, refreshAll, hasData } from "../lib/jobs/store";
+import {
+  getJobs,
+  getCompanies,
+  getCompanyStatus,
+  getStats,
+  refreshAll,
+  hasData,
+} from "../lib/jobs/store";
 import {
   getAppliedJobIds,
   getAppliedJobs,
@@ -25,6 +32,29 @@ import { sendDigest } from "../lib/email/send-digest";
 
 const router: IRouter = Router();
 
+/**
+ * A persisted (applied/not-interested) job is only "confirmed closed" when
+ * ALL of the following hold:
+ *  - the live feed overall has data (`feedHealthy`) — if the entire
+ *    in-memory jobs map is empty (refreshAll() hasn't run yet, every fetch
+ *    failed, or a bug wiped it), we have no reliable live data for *any*
+ *    company, so nothing can be confirmed closed;
+ *  - the specific company was fetched successfully at least once (no error
+ *    on its status) — a company whose fetch errored or was never attempted
+ *    might just have stale/missing data, not a real closure;
+ *  - the job is still missing from the live feed.
+ * Missing any of these means "unknown," not "closed" — we'd rather keep
+ * showing a posting than wrongly hide it as closed.
+ */
+function isConfirmedClosed(companySlug: string, live: unknown, feedHealthy: boolean): boolean {
+  if (!feedHealthy) return false;
+  if (live) return false;
+  const companyStatus = companySlug ? getCompanyStatus(companySlug) : undefined;
+  if (!companyStatus) return false;
+  if (companyStatus.error !== null) return false;
+  return true;
+}
+
 router.get("/jobs", async (req, res) => {
   if (!hasData()) await refreshAll(req.log);
   const { company, q, status } = req.query as { company?: string; q?: string; status?: string };
@@ -36,6 +66,10 @@ router.get("/jobs", async (req, res) => {
     // closed posting still shows up here (flagged as closed) instead of
     // silently disappearing once the company's feed drops it.
     const liveById = new Map(getJobs({ company, q }).map((j) => [j.id, j]));
+    // Feed health is judged from the whole live feed, not the
+    // company/q-filtered slice above, so a filter never masks the
+    // "we have no live data at all" case.
+    const feedHealthy = getJobs().length > 0;
     let appliedJobs = await getAppliedJobs();
     if (company) appliedJobs = appliedJobs.filter((a) => a.companySlug === company);
     if (q) {
@@ -56,7 +90,7 @@ router.get("/jobs", async (req, res) => {
           postedOn: live?.postedOn ?? a.postedOn ?? null,
           applied: true,
           notInterested: notInterestedIds.has(a.jobId),
-          closed: !live,
+          closed: isConfirmedClosed(live?.companySlug ?? a.companySlug, live, feedHealthy),
         };
       })
       .sort((a, b) => a.company.localeCompare(b.company) || a.title.localeCompare(b.title));
@@ -73,6 +107,7 @@ router.get("/jobs", async (req, res) => {
     // still be looked up so we can tell it apart from one that never had a
     // snapshot at all.
     const liveById = new Map(getJobs().map((j) => [j.id, j]));
+    const feedHealthy = liveById.size > 0;
     let dismissedJobs = await getNotInterestedJobs();
     if (company) {
       dismissedJobs = dismissedJobs.filter(
@@ -103,7 +138,7 @@ router.get("/jobs", async (req, res) => {
           postedOn: live?.postedOn ?? d.postedOn ?? null,
           applied: appliedIds.has(d.jobId),
           notInterested: true,
-          closed: !live,
+          closed: isConfirmedClosed(live?.companySlug ?? d.companySlug ?? "", live, feedHealthy),
         };
       })
       .sort((a, b) => a.company.localeCompare(b.company) || a.title.localeCompare(b.title));
