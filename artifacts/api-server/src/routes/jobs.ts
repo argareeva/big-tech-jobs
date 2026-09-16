@@ -17,6 +17,7 @@ import {
 } from "../lib/jobs/applied";
 import {
   getNotInterestedJobIds,
+  getNotInterestedJobs,
   getNotInterestedCount,
   setNotInterested,
 } from "../lib/jobs/not-interested";
@@ -63,10 +64,55 @@ router.get("/jobs", async (req, res) => {
     return;
   }
 
-  let all = getJobs({ company, q });
   if (status === "not_interested") {
-    all = all.filter((j) => notInterestedIds.has(j.id));
-  } else if (status !== "all") {
+    // Not-interested jobs are persisted independently of the live feed, so
+    // a closed posting still shows up here (flagged as closed) instead of
+    // silently disappearing once the company's feed drops it.
+    // liveById is unfiltered by company/q — a dismissed job whose live
+    // posting no longer matches the current filters (e.g. it's closed) must
+    // still be looked up so we can tell it apart from one that never had a
+    // snapshot at all.
+    const liveById = new Map(getJobs().map((j) => [j.id, j]));
+    let dismissedJobs = await getNotInterestedJobs();
+    if (company) {
+      dismissedJobs = dismissedJobs.filter(
+        (d) => (d.companySlug ?? liveById.get(d.jobId)?.companySlug) === company,
+      );
+    }
+    if (q) {
+      const needle = q.toLowerCase();
+      dismissedJobs = dismissedJobs.filter((d) =>
+        (d.title ?? liveById.get(d.jobId)?.title ?? "").toLowerCase().includes(needle),
+      );
+    }
+    const result = dismissedJobs
+      .map((d) => {
+        const live = liveById.get(d.jobId);
+        // Rows dismissed before the snapshot feature shipped have no
+        // stored details. If the live posting is also gone, fall back to
+        // placeholders rather than fabricating data — the row still stays
+        // suppressed either way.
+        return {
+          id: d.jobId,
+          title: live?.title ?? d.title ?? "(details unavailable)",
+          company: live?.company ?? d.company ?? "(details unavailable)",
+          companySlug: live?.companySlug ?? d.companySlug ?? "",
+          location: live?.location ?? d.location ?? "(details unavailable)",
+          applyUrl: live?.applyUrl ?? d.applyUrl ?? "",
+          source: live?.source ?? d.source ?? "unknown",
+          postedOn: live?.postedOn ?? d.postedOn ?? null,
+          applied: appliedIds.has(d.jobId),
+          notInterested: true,
+          closed: !live,
+        };
+      })
+      .sort((a, b) => a.company.localeCompare(b.company) || a.title.localeCompare(b.title));
+    res.json(ListJobsResponse.parse(result));
+    return;
+  }
+
+  let all = getJobs({ company, q });
+  if (status !== "all") {
     all = all.filter((j) => !appliedIds.has(j.id) && !notInterestedIds.has(j.id));
   }
   res.json(
@@ -131,15 +177,51 @@ router.post("/jobs/applied", async (req, res) => {
 });
 
 router.post("/jobs/not-interested", async (req, res) => {
-  const { jobId, notInterested } = (req.body ?? {}) as {
-    jobId?: unknown;
-    notInterested?: unknown;
-  };
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const { jobId, notInterested } = body as { jobId?: unknown; notInterested?: unknown };
   if (typeof jobId !== "string" || !jobId || typeof notInterested !== "boolean") {
     res.status(400).json({ error: "jobId (string) and notInterested (boolean) are required" });
     return;
   }
-  await setNotInterested(jobId, notInterested);
+  if (notInterested) {
+    const { title, company, companySlug, location, applyUrl, source } = body as Record<
+      string,
+      unknown
+    >;
+    if (
+      typeof title !== "string" ||
+      !title ||
+      typeof company !== "string" ||
+      !company ||
+      typeof companySlug !== "string" ||
+      !companySlug ||
+      typeof location !== "string" ||
+      !location ||
+      typeof applyUrl !== "string" ||
+      !applyUrl ||
+      typeof source !== "string" ||
+      !source
+    ) {
+      res.status(400).json({
+        error:
+          "title, company, companySlug, location, applyUrl, and source (all strings) are required when notInterested is true",
+      });
+      return;
+    }
+    const postedOn = typeof body.postedOn === "string" ? body.postedOn : null;
+    await setNotInterested(jobId, true, {
+      jobId,
+      title,
+      company,
+      companySlug,
+      location,
+      applyUrl,
+      source,
+      postedOn,
+    });
+  } else {
+    await setNotInterested(jobId, false);
+  }
   res.json(SetJobNotInterestedResponse.parse({ jobId, notInterested }));
 });
 

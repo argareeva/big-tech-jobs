@@ -10,7 +10,7 @@ interface JobListProps {
   isLoading?: boolean;
   view?: JobListView;
   onToggleApplied?: (job: Job, applied: boolean) => void;
-  onToggleNotInterested?: (jobId: string, notInterested: boolean) => void;
+  onToggleNotInterested?: (job: Job, notInterested: boolean) => void;
   isUpdatingJobId?: string;
 }
 
@@ -146,7 +146,7 @@ export function JobList({
                 size="sm"
                 className="flex-shrink-0 gap-1.5"
                 disabled={isUpdating}
-                onClick={() => onToggleNotInterested(job.id, !job.notInterested)}
+                onClick={() => onToggleNotInterested(job, !job.notInterested)}
                 data-testid={`button-toggle-not-interested-${job.id}`}
               >
                 {job.notInterested ? (

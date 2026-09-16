@@ -196,9 +196,10 @@ components:
         closed:
           type: boolean
           description: >
-            True when this applied posting is no longer present in the live
-            company feed (the role closed or was removed). Always false for
-            jobs that aren't marked applied.
+            True when this applied or not-interested posting is no longer
+            present in the live company feed (the role closed or was
+            removed). Always false for jobs that aren't marked applied or
+            not interested.
     Company:
       type: object
       required: [name, slug, ats, programName, programStatus, jobCount, hasApplied]
@@ -324,6 +325,23 @@ components:
           description: The exact job id to mark/unmark (companySlug + external id)
         notInterested:
           type: boolean
+        title:
+          type: string
+          description: >
+            Required when notInterested is true — snapshot fields let the job
+            keep showing up after the live posting closes
+        company:
+          type: string
+        companySlug:
+          type: string
+        location:
+          type: string
+        applyUrl:
+          type: string
+        source:
+          type: string
+        postedOn:
+          type: ["string", "null"]
     SetNotInterestedResponse:
       type: object
       required: [jobId, notInterested]

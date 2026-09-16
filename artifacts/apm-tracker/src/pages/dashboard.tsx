@@ -107,8 +107,22 @@ export default function Dashboard() {
     },
   });
 
-  const handleToggleNotInterested = (jobId: string, notInterested: boolean) => {
-    setNotInterestedMutation.mutate({ data: { jobId, notInterested } });
+  const handleToggleNotInterested = (job: Job, notInterested: boolean) => {
+    setNotInterestedMutation.mutate({
+      data: {
+        jobId: job.id,
+        notInterested,
+        // Snapshot the job's display fields so it keeps showing up under
+        // Not Interested even after the live posting closes.
+        title: job.title,
+        company: job.company,
+        companySlug: job.companySlug,
+        location: job.location,
+        applyUrl: job.applyUrl,
+        source: job.source,
+        postedOn: job.postedOn,
+      },
+    });
   };
 
   const digestMutation = useSendDigest({

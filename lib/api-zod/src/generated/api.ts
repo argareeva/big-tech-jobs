@@ -39,7 +39,7 @@ export const ListJobsResponseItem = zod.object({
   "postedOn": zod.string().nullish().describe('Posting date text if available'),
   "applied": zod.boolean().describe('Whether the user has marked this exact posting as applied'),
   "notInterested": zod.boolean().describe('Whether the user has marked this exact posting as not interested'),
-  "closed": zod.boolean().describe('True when this applied posting is no longer present in the live company feed (the role closed or was removed). Always false for jobs that aren\'t marked applied.\n')
+  "closed": zod.boolean().describe('True when this applied or not-interested posting is no longer present in the live company feed (the role closed or was removed). Always false for jobs that aren\'t marked applied or not interested.\n')
 })
 export const ListJobsResponse = zod.array(ListJobsResponseItem)
 
@@ -70,7 +70,14 @@ export const SetJobAppliedResponse = zod.object({
  */
 export const SetJobNotInterestedBody = zod.object({
   "jobId": zod.string().describe('The exact job id to mark\/unmark (companySlug + external id)'),
-  "notInterested": zod.boolean()
+  "notInterested": zod.boolean(),
+  "title": zod.string().optional().describe('Required when notInterested is true — snapshot fields let the job keep showing up after the live posting closes\n'),
+  "company": zod.string().optional(),
+  "companySlug": zod.string().optional(),
+  "location": zod.string().optional(),
+  "applyUrl": zod.string().optional(),
+  "source": zod.string().optional(),
+  "postedOn": zod.string().nullish()
 })
 
 export const SetJobNotInterestedResponse = zod.object({
