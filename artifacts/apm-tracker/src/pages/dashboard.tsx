@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Search, RefreshCw, Loader2, Mail } from 'lucide-react';
+import { Search, RefreshCw, Loader2, Mail, LogOut } from 'lucide-react';
+import { useClerk, useUser } from '@clerk/react';
 import {
   useListJobs,
   useListCompanies,
@@ -23,6 +24,8 @@ import { useToast } from '@/hooks/use-toast';
 type JobView = 'open' | 'applied' | 'not_interested';
 
 export default function Dashboard() {
+  const { signOut } = useClerk();
+  const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [view, setView] = useState<JobView>('open');
@@ -174,6 +177,24 @@ export default function Dashboard() {
             </div>
 
             <div className="flex items-center gap-2">
+              <div className="hidden text-right sm:block">
+                <div className="text-xs font-semibold text-foreground">
+                  {user?.firstName || user?.primaryEmailAddress?.emailAddress}
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  Signed in
+                </div>
+              </div>
+              <Button
+                onClick={() => signOut({ redirectUrl: import.meta.env.BASE_URL })}
+                size="sm"
+                variant="ghost"
+                className="gap-2"
+                aria-label="Sign out"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Sign out</span>
+              </Button>
               <Button
                 onClick={() => digestMutation.mutate()}
                 disabled={digestMutation.isPending}
