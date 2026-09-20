@@ -227,7 +227,7 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "Arcade AI", slug: "arcade-ai", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "arcade-ai" },
   // Sierra's product/engineering new-grad program is branded "APX", so its
   // title does not contain the usual product/program keywords.
-  { name: "Sierra AI", slug: "sierra-ai", ats: "ashby", programName: "APM Program", programStatus: "active", ashbyBoardName: "Sierra", titleAliases: ["APX (New Grad"] },
+  { name: "Sierra AI", slug: "sierra-ai", ats: "ashby", programName: "APX (New Grad)", programStatus: "active", ashbyBoardName: "Sierra", titleAliases: ["APX (New Grad"] },
   { name: "Kleiner Perkins Fellows", slug: "kp-fellows", ats: "ashby", programName: "Fellows Program", programStatus: "active", ashbyBoardName: "KleinerPerkinsFellows", titleAliases: ["Product Fellow"] },
   // Red Hat — Workday tenant confirmed live: POST returns 200 with real postings
   // (company=redhat, tenant=jobs; not the more common "External"/"Careers" tenant names).

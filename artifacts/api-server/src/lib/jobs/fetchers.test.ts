@@ -21,6 +21,7 @@ import {
   probeWalmartQueryId,
   WALMART_CAREERS_QUERY_ID,
 } from "./fetchers.js";
+import { COMPANIES } from "./companies.js";
 import type { CompanyConfig } from "./companies.js";
 
 // ---------------------------------------------------------------------------
@@ -96,6 +97,7 @@ describe("isApmTitle — true positives", () => {
     ["builder qualifier", "Associate Product Builder"],
     ["graduate program qualifier", "Product Manager, Graduate Program"],
     ["new grad with other qualifying words", "Technical Product Manager – New Grad"],
+    ["associate product manager in a marketing domain", "Associate Product Manager - Marketing Operations and Automation"],
     // Widened scope, no longer excluded by the old adjacency requirement —
     // "associate"/"product" both appear in the title, just not adjacent, and
     // neither pairs with a seniority/marketing exclusion word. This is a
@@ -215,6 +217,12 @@ describe("matchesApmTitle — per-company alias list", () => {
     expect(matchesApmTitle("Associate Product Manager", noAliasCompany)).toBe(true);
     expect(matchesApmTitle("Random Title", noAliasCompany)).toBe(false);
   });
+
+  it("matches Sierra's branded APX new-grad program", () => {
+    const sierra = COMPANIES.find((company) => company.slug === "sierra-ai");
+    expect(sierra).toBeDefined();
+    expect(matchesApmTitle("APX (New Grad 2027)", sierra!)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -282,6 +290,7 @@ describe("isApmTitle — seniority/marketing exclusion (Task #55)", () => {
     ["vice president spelled out", "Associate Vice President, Product Strategy"],
     ["chief with associate qualifier", "Associate to the Chief Product Officer"],
     ["marketing department, not PM", "New Grad Product Marketing Associate"],
+    ["product marketing manager, not PM", "Associate Product Marketing Manager"],
     ["director program manager", "Associate Director, Program Management"],
   ])("rejects: %s → %s", (_label, title) => {
     expect(isApmTitle(title)).toBe(false);

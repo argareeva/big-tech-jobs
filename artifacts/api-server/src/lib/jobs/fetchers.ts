@@ -69,8 +69,12 @@ const QUALIFIER_WORD_RE = new RegExp(`\\b(?:${QUALIFIER_WORD_PATTERNS.join("|")}
 // requirement the user explicitly asked to drop — it only carves out titles
 // that are clearly not APM/PM programs. See
 // .agents/memory/apm-title-matching-scope.md.
-const SENIORITY_OR_MARKETING_EXCLUSION_RE =
-  /\b(director|vp|vice[\s-]?president|chief|senior|marketing)\b/i;
+const SENIORITY_EXCLUSION_RE =
+  /\b(director|vp|vice[\s-]?president|chief|senior)\b/i;
+const MARKETING_ROLE_EXCLUSION_RE =
+  /\b(product\s+marketing|marketing\s+(?:manager|director|specialist|associate|coordinator|analyst))\b/i;
+const EXPLICIT_ASSOCIATE_PM_RE =
+  /\bassociate(?:\s+technical)?\s+product\s+manager\b/i;
 
 // Word-boundary check for "product"/"program" (and plurals) — NOT a plain
 // substring `.includes()`. A substring check incorrectly matches unrelated
@@ -107,10 +111,15 @@ export function isApmTitle(title: string): boolean {
   // Layer 1: broad pattern — "product"/"program" co-occurring anywhere in
   // the title with an entry-level/rotational qualifier word. Excludes
   // titles that also carry a seniority/leadership or marketing-department
-  // word (see SENIORITY_OR_MARKETING_EXCLUSION_RE above) — those are false
-  // positives from the broadened rule, not true entry-level PM programs.
+  // word — those are false positives from the broadened rule, not true
+  // entry-level PM programs. An explicit Associate Product Manager title
+  // remains eligible when "marketing" describes the product domain.
   if (PRODUCT_OR_PROGRAM_RE.test(t) && QUALIFIER_WORD_RE.test(t)) {
-    return !SENIORITY_OR_MARKETING_EXCLUSION_RE.test(t);
+    if (SENIORITY_EXCLUSION_RE.test(t)) return false;
+    if (MARKETING_ROLE_EXCLUSION_RE.test(t) && !EXPLICIT_ASSOCIATE_PM_RE.test(t)) {
+      return false;
+    }
+    return true;
   }
 
   // Titles that express the same entry-level-program intent without literally
